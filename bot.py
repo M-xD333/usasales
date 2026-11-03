@@ -3,6 +3,7 @@
 import html, json, os, re, sys, time
 from pathlib import Path
 import requests
+import feedparser
 
 DATA = Path(__file__).parent / "data"
 DATA.mkdir(exist_ok=True)
@@ -34,6 +35,31 @@ CAT_KEYWORDS = [
     ("peripheral", ("keyboard", "mouse", "headset", "headphone", "controller")),
 ]
 
+TITLE_HINTS = [
+    ("gpu", r"\brtx\b|geforce|radeon|\brx ?\d{4}|arc b\d{3}|graphics card|video card"),
+    ("cpu", r"ryzen|core (?:ultra|i[3579])|threadripper|\bcpu\b|processor"),
+    ("mobo", r"motherboard"),
+    ("ram", r"\bddr[345]\b|\bram\b|\bdram\b"),
+    ("ssd", r"\bssd\b|nvme|\bm\.2\b|solid state"),
+    ("hdd", r"hard drive|\bhdd\b|ironwolf|barracuda|exos"),
+    ("monitor", r"monitor"),
+    ("psu", r"power supply|\bpsu\b"),
+    ("cooler", r"cpu cooler|\baio\b|liquid cooler"),
+    ("case", r"pc case|computer case|mid tower|full tower"),
+    ("prebuilt", r"gaming pc|gaming desktop"),
+    ("laptop", r"laptop"),
+    ("peripheral", r"keyboard|\bmouse\b|headset"),
+]
+
+
+def detect_cat_from_title(title):
+    t = title.lower()
+    for cat, rx in TITLE_HINTS:
+        if re.search(rx, t):
+            return cat
+    return "other"
+
+
 NUM = r"(\d[\d,]*(?:\.\d+)?)"
 def num(s): return float(s.replace(",", ""))
 
@@ -60,11 +86,14 @@ def parse(post):
     m = re.match(r"\s*\[([^\]]+)\]\s*(.*)", title)
     tag, rest = (m.group(1), m.group(2)) if m else (post.get("link_flair_text") or "", title)
     cat = detect_cat(tag or post.get("link_flair_text") or "")
+    if cat == "other":
+        cat = detect_cat_from_title(title)
     pm = re.search(r"\$\s?" + NUM, rest)
     if not pm:
         return None
     price = num(pm.group(1))
     name = rest[:pm.start()].rstrip(" -–—|:(").strip() or rest
+    name = re.sub(r"\s+(?:for|at|from|only|now|starting at)$", "", name, flags=re.I)
     tail = rest[pm.end():]
 
     was = None
@@ -81,7 +110,7 @@ def parse(post):
             if 0 < p < 95:
                 was = price / (1 - p / 100)
 
-    sm = re.search(r"@\s*([^()\[\]]+)", tail)
+    sm = re.search(r"(?:@|\bat\b|\bfrom\b|\bvia\b)\s+([A-Z][\w .&'-]{1,30}?)(?:\s*(?:\+|\(|\[|,|$))", tail)
     store = sm.group(1).strip() if sm else ""
     key = re.sub(r"[^a-z0-9 ]", " ", name.lower())
     key = re.sub(r"\s+", " ", key).strip()
@@ -89,7 +118,7 @@ def parse(post):
         "id": post["id"], "title": title, "tag": tag, "cat": cat, "name": name,
         "key": key, "price": price, "was": was, "store": store,
         "cond": detect_condition(title), "url": post.get("url") or "",
-        "discuss": "https://www.reddit.com" + post.get("permalink", ""),
+        "discuss": post.get("discuss_url") or "https://www.reddit.com" + post.get("permalink", ""),
         "score": int(post.get("score") or 0), "created": float(post.get("created_utc") or time.time()),
         "flair": (post.get("link_flair_text") or "").lower(),
     }
@@ -167,6 +196,51 @@ def tg_send(text):
     raise RuntimeError("Telegram: слишком много попыток")
 
 
+BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+# (имя, url, "оценка сообщества", которую присваиваем сделкам из этой ленты)
+FEEDS = [
+    ("slickdeals-frontpage", "https://slickdeals.net/newsearch.php?mode=frontpage&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
+    ("slickdeals-popular", "https://slickdeals.net/newsearch.php?mode=popdeals&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
+    ("slickdeals-hot", "https://slickdeals.net/newsearch.php?searchin=first&forumchoice%5B%5D=9&rss=1", MIN_SCORE),
+]
+
+
+def fetch_feed(name, url, score):
+    r = requests.get(url, headers={"User-Agent": BROWSER_UA}, timeout=20)
+    r.raise_for_status()
+    out = []
+    for e in feedparser.parse(r.content).entries:
+        ts = time.mktime(e.published_parsed) if getattr(e, "published_parsed", None) else time.time()
+        link = e.get("link", "")
+        out.append({"id": e.get("id") or link, "title": e.get("title", ""), "url": link,
+                    "discuss_url": link, "score": score, "created_utc": ts,
+                    "link_flair_text": ""})
+    return out
+
+
+def fetch_all():
+    posts, ok = [], 0
+    for name, url, score in FEEDS:
+        try:
+            got = fetch_feed(name, url, score)
+            ok += 1
+            print(f"[{name}] получено записей: {len(got)}")
+            posts += got
+        except Exception as ex:
+            print(f"[{name}] ОШИБКА: {ex}")
+    if os.environ.get("REDDIT_CLIENT_ID"):
+        try:
+            got = fetch_reddit()
+            ok += 1
+            print(f"[reddit] получено записей: {len(got)}")
+            posts += got
+        except Exception as ex:
+            print(f"[reddit] ОШИБКА: {ex}")
+    if ok == 0:
+        raise SystemExit("Все источники недоступны")
+    return posts
+
+
 def fetch_reddit():
     cid, sec = os.environ.get("REDDIT_CLIENT_ID"), os.environ.get("REDDIT_CLIENT_SECRET")
     headers = {"User-Agent": UA}
@@ -194,12 +268,12 @@ def main():
     seen, hist = load(SEEN_F, {}), load(HIST_F, {})
     posted = 0
 
-    for post in sorted(fetch_reddit(), key=lambda p: p["created_utc"]):
+    for post in sorted(fetch_all(), key=lambda p: p["created_utc"]):
         pid = post["id"]
         if pid in seen:
             continue
         d = parse(post)
-        if d is None or "expired" in d["flair"]:
+        if d is None or d["cat"] == "other" or "expired" in d["flair"]:
             seen[pid] = now
             continue
         samples = hist.setdefault(d["key"], [])
