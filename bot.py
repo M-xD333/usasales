@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""US deals -> Telegram (текстовые публикации, запуск из GitHub Actions)."""
 import html
 import json
 import os
@@ -153,6 +153,19 @@ def clean_name(text, pos=None):
     return name.strip() or text.strip()
 
 
+def extract_name(text, price_pos):
+    t = re.sub(r"^(?:\s*\[[^\]]*\])+\s*", "", text)           # ведущие [Магазин] / [Пометки]
+    m = re.match(r"^\s*\$\s?[\d,]+(?:\.\d+)?\*?\s*[|\-–—]\s*", t)   # «$1699 | Название ...»
+    if m:
+        name = t[m.end():]
+        name = re.sub(r"\s+(?:at|from|via)\s+[A-Z][\w.&' !-]{1,30}$", "", name).strip()
+        return name or t.strip()
+    pos = None
+    if price_pos is not None:
+        pos = price_pos - (len(text) - len(t))
+    return clean_name(t, pos if pos and pos > 0 else None)
+
+
 # ============================== категории / состояние / магазины ==============================
 TAG_MAP = {"gpu": "gpu", "cpu": "cpu", "motherboard": "mobo", "mobo": "mobo", "ram": "ram", "ssd": "ssd",
            "hdd": "hdd", "monitor": "monitor", "psu": "psu", "case": "case", "cooler": "cooler",
@@ -164,6 +177,7 @@ CLASSIFY = [
     ("laptop", r"\blaptop|notebook|chromebook|macbook|ultrabook"),
     ("minipc", r"mini[- ]pc|\bnuc\b|mini desktop"),
     ("prebuilt", r"gaming pc|gaming desktop|prebuilt|all-in-one pc|desktop pc|desktop computer"),
+    ("mobo", r"motherboard"),
     ("nas", r"\bnas\b|network attached"),
     ("ext_storage", r"external (?:ssd|hard drive|hdd|drive|storage)|portable ssd|flash drive|usb drive|micro ?sd|sd card|memory card"),
     ("networking", r"router|wi-?fi|mesh|network switch|ethernet switch|\bnic\b|network card|access point|\bmodem\b|powerline"),
@@ -185,11 +199,22 @@ CLASSIFY = [
     ("printer", r"printer"),
 ]
 CLASSIFY_RX = [(c, re.compile(rx, re.I)) for c, rx in CLASSIFY]
+_SPEC_CPU = re.compile(r"ryzen|core (?:ultra |i[3579])|intel ultra|snapdragon|celeron|pentium|\bapple m\d", re.I)
+_SPEC_RAM = re.compile(r"\d+ ?gb (?:ddr\d|lpddr\d|ram)|\bram\b", re.I)
+_SPEC_STO = re.compile(r"\d+ ?(?:gb|tb) (?:pcie|nvme|ssd)|\bssd\b", re.I)
+_SPEC_SCR = re.compile(r"\b\d{2}(?:\.\d)?\s?[\"″”]|\bfhd\b|touch|\bips\b|\boled\b", re.I)
+
+
+def looks_like_system(text):
+    """CPU+RAM+накопитель+экран в одном заголовке = ноутбук/готовый ПК, а не отдельная деталь."""
+    hits = sum(bool(rx.search(text)) for rx in (_SPEC_CPU, _SPEC_RAM, _SPEC_STO, _SPEC_SCR))
+    return hits >= 3
 REVIEW_HINT = re.compile(r"\btv\b|television|camera|tablet|ipad|phone|earbuds|airpods|speaker|soundbar|smartwatch|drone|kindle|usb|charger|power bank", re.I)
 
-KNOWN_STORES = ["Amazon", "Newegg", "Best Buy", "Walmart", "Micro Center", "B&H", "Woot", "eBay", "Dell", "HP",
-                "Lenovo", "Costco", "Corsair", "Samsung", "Target", "Adorama", "Antonline", "Staples", "Office Depot"]
-STORE_RX = [(s, re.compile(r"(?<![A-Za-z])" + re.escape(s) + r"(?![A-Za-z])", re.I)) for s in KNOWN_STORES]
+KNOWN_STORES = ["Amazon", "Newegg", "Best Buy", "Walmart", "Micro Center", "B&H", "Woot", "eBay", "Costco",
+                "Target", "Adorama", "Antonline", "Staples", "Office Depot"]
+STORE_RX = [(s, re.compile(r"(?:@|\bat\b|\bfrom\b|\bvia\b|\[)\s*" + re.escape(s) + r"(?![A-Za-z])", re.I))
+            for s in KNOWN_STORES]
 STORE_FALLBACK = re.compile(r"(?:@|\bat\b|\bfrom\b|\bvia\b)\s+([A-Z][\w.&' -]{1,30}?)(?=\s*(?:\+|\(|\[|,|$|w/|with|after|\bfor\b))")
 ASIN_RX = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})\b")
 STOPWORDS = {"new", "free", "shipping", "w", "with", "after", "coupon", "code", "prime", "member", "members",
@@ -203,6 +228,8 @@ def classify(text, tag=""):
     for cat, rx in CLASSIFY_RX:
         if rx.search(text):
             return cat
+        if cat == "prebuilt" and looks_like_system(text):
+            return "laptop"
     return "review" if REVIEW_HINT.search(text) else "other"
 
 
@@ -234,9 +261,11 @@ def make_deal(entry, source, now):
     """entry (нормализованная запись) -> словарь сделки (JSON-совместимый)."""
     title = html.unescape(entry["title"]).strip()
     tag, rest = split_tag(title)
+    if tag.lower() not in TAG_MAP:       # «[Micro Center]», «[Open-Box YMMV]» и т.п. — не категория
+        tag, rest = "", title
     pi = parse_prices(rest)
     cat = classify(rest, tag or entry.get("flair", ""))
-    name = clean_name(rest, pi.get("first_price_pos"))
+    name = extract_name(rest, pi.get("first_price_pos"))
     asin_m = ASIN_RX.search(entry["url"] or "") or ASIN_RX.search(entry.get("summary", ""))
     asin = asin_m.group(1) if asin_m else None
     cond = detect_condition(title)
