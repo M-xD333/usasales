@@ -9,6 +9,7 @@ from urllib.parse import quote_plus
 
 import feedparser
 import requests
+import store_links
 
 BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -118,9 +119,13 @@ def entry_timestamp(e):
 def normalize_entry(e):
     link = e.get("link", "") or ""
     title = (e.get("title") or "").strip()
+    markup = (e.get("summary", "") or "") + "\n" + "\n".join(
+        c.get("value", "") for c in e.get("content", []))
+    candidates = store_links.extract_links(markup, link)
     summary = re.sub(r"<[^>]+>", " ", e.get("summary", "") or "")
     summary = re.sub(r"\s+", " ", summary).strip()[:600]
     return {"item_id": e.get("id") or link or title, "url": link, "discuss_url": link,
+            "store_candidates": candidates,
             "title": title, "summary": summary, "published_ts": entry_timestamp(e),
             "expired": bool(EXPIRED_RX.search(title)), "community_score": None, "flair": ""}
 

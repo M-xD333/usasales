@@ -14,6 +14,7 @@ from pathlib import Path
 import requests
 
 import sources as S
+import store_links
 
 DATA = Path(__file__).parent / "data"
 STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
@@ -280,6 +281,7 @@ def make_deal(entry, source, now):
         "original_kind": pi["original_kind"], "price_kind": pi["price_kind"], "code": pi["code"],
         "flags": sorted(pi["flags"]), "cond": cond, "store": detect_store(rest),
         "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
+        "store_candidates": entry.get("store_candidates", []),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
         "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
     }
@@ -414,12 +416,6 @@ def build_message(d, info):
     if d["community_score"] is not None:
         lines.append(f"👍 Голоса сообщества: {d['community_score']}")
     lines.append(f"🔎 Источник: {e(d['source'])}")
-    lines.append("")
-    url = safe_url(d["url"])
-    lines.append(f"👉 <a href=\"{e(url, quote=True)}\">СМОТРЕТЬ В МАГАЗИНЕ</a>")
-    disc = safe_url(d["discuss"])
-    if disc and disc != url:
-        lines.append(f"💬 <a href=\"{e(disc, quote=True)}\">Обсуждение</a>")
     link = os.environ.get("CHANNEL_LINK", "")
     if link:
         lines += ["", "———————————————", f"📢 Ссылка для друзей: {e(link)}"]
@@ -439,12 +435,17 @@ def redact(text):
     return str(text).replace(tok, "***") if tok else str(text)
 
 
-def tg_send(text, session=requests, sleep=time.sleep):
+def tg_send(text, session=requests, sleep=time.sleep, store_url=None):
     """Отправка с retry. Остаточный риск: если ответ потерян после доставки (read timeout),
     сообщение помечается ambiguous и НЕ отправляется повторно (лучше пропуск, чем дубль)."""
     token, chat = os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": False}
+    if store_url:
+        direct = store_links.merchant_url(store_url)
+        if not direct:
+            raise TelegramError("нет прямой ссылки магазина", permanent=True)
+        payload["reply_markup"] = {"inline_keyboard": [[{"text": "В магазин", "url": direct}]]}
     last = "неизвестная ошибка"
     for attempt in range(4):
         try:
@@ -541,6 +542,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
 
     deals.sort(key=lambda d: d["published_ts"] or 0, reverse=True)   # сначала новые
     transient_fails = 0
+    link_deadline = time.monotonic() + 60
 
     for d in deals:
         sid = d["source_id"]
@@ -598,13 +600,24 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats["нет корректной ссылки"] += 1
             continue
 
+        direct = store_links.resolve_store_url(
+            d["url"], d.get("store_candidates", []), d.get("discuss", ""),
+            budget=max(0, min(15, link_deadline - time.monotonic())))
+        if not direct:
+            # Retry on the next run, including when the feed returns 304.
+            state["pending"][pkey] = d
+            stats["ждут прямой ссылки магазина"] += 1
+            per_src[sid]["нет прямой ссылки магазина"] += 1
+            continue
+        d["url"] = direct
+
         msg = build_message(d, info)
         if dry:
-            log(msg + "\n" + "=" * 40)
+            log(msg + "\nВ магазин: " + direct + "\n" + "=" * 40)
             stats["опубликовано"] += 1
             continue
         try:
-            send(msg)
+            send(msg, store_url=direct)
         except TelegramError as ex:
             if ex.ambiguous:      # возможно доставлено: помечаем, чтобы не плодить дубли
                 log(f"[WARN] {ex}; помечаю как отправленное (риск пропуска вместо дубля)")

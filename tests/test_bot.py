@@ -212,10 +212,11 @@ class TelegramTests(unittest.TestCase):
         os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"] = "123:SECRET", "@chan"
 
     def test_html_escape(self):
-        d = deal("Corsair <b>RAM</b> & Co 32GB DDR5 $80 (was $160)", url="https://x.com/a?b=1&c=2")
+        d = deal("Corsair <b>RAM</b> & Co 32GB DDR5 $80 (was $160)", url="https://www.newegg.com/p/N82E1681?b=1&c=2")
         msg = bot.build_message(d, bot.assess(d, Assessment.EMPTY, cfg(), NOW)[1])
         self.assertIn("&lt;b&gt;", msg)
-        self.assertIn("b=1&amp;c=2", msg)
+        self.assertNotIn("Обсуждение", msg)
+        self.assertNotIn("href=", msg)
         self.assertLessEqual(len(msg), 4096)
 
     def test_429_then_ok(self):
@@ -263,14 +264,14 @@ class TelegramTests(unittest.TestCase):
 
 class Checkpoint(unittest.TestCase):
     def _deals(self):
-        return [deal(f"Samsung 990 PRO {i}TB NVMe SSD $100 (was $200)", item_id=f"id{i}", url=f"https://x.com/{i}",
+        return [deal(f"Samsung 990 PRO {i}TB NVMe SSD $100 (was $200)", item_id=f"id{i}", url=f"https://www.ebay.com/itm/{i}",
                      ts=NOW - 60 * i) for i in (1, 2)]
 
     def test_first_saved_when_second_fails(self):
         saved = []
         calls = {"n": 0}
 
-        def send(msg):
+        def send(msg, **kwargs):
             calls["n"] += 1
             if calls["n"] == 2:
                 raise bot.TelegramError("boom", permanent=False)
@@ -282,25 +283,25 @@ class Checkpoint(unittest.TestCase):
         self.assertTrue(saved and len(saved[-1]["processed"]) == 1)
         # следующий запуск: первое не повторяется, второе отправляется
         sent = []
-        bot.process(self._deals(), state, {}, NOW + 300, cfg(), sent.append)
+        bot.process(self._deals(), state, {}, NOW + 300, cfg(), lambda text, **kw: sent.append(text))
         self.assertEqual(len(sent), 1)
 
     def test_newest_first_and_limit_defers(self):
         sent = []
         state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
-        ds = [deal(f"Samsung 990 PRO {i}TB NVMe SSD $100 (was $200)", item_id=f"id{i}", url=f"https://x.com/{i}",
+        ds = [deal(f"Samsung 990 PRO {i}TB NVMe SSD $100 (was $200)", item_id=f"id{i}", url=f"https://www.ebay.com/itm/{i}",
                    ts=NOW - 600 * i) for i in (1, 2, 3)]
-        bot.process(ds, state, {}, NOW, cfg(max_posts=1), sent.append)
+        bot.process(ds, state, {}, NOW, cfg(max_posts=1), lambda text, **kw: sent.append(text))
         self.assertEqual(len(sent), 1)
         self.assertIn("1TB", sent[0])                 # самый свежий
         self.assertEqual(len(state["pending"]), 2)    # остальные не потеряны
-        bot.process([], state, {}, NOW + 300, cfg(max_posts=1), sent.append)   # даже если лента отдала 304/пусто
+        bot.process([], state, {}, NOW + 300, cfg(max_posts=1), lambda text, **kw: sent.append(text))   # даже если лента отдала 304/пусто
         self.assertEqual(len(sent), 2)
 
     def test_dry_run_leaves_state_untouched(self):
         state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
         sent = []
-        bot.process(self._deals(), state, {}, NOW, cfg(), sent.append, dry=True, log=lambda *_: None)
+        bot.process(self._deals(), state, {}, NOW, cfg(), lambda text, **kw: sent.append(text), dry=True, log=lambda *_: None)
         self.assertEqual(sent, [])
         self.assertEqual(state["processed"], {})
         self.assertEqual(state["posted"], {})
@@ -308,10 +309,10 @@ class Checkpoint(unittest.TestCase):
     def test_price_change_reevaluated(self):
         state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
         sent = []
-        a = deal("Samsung 990 PRO 2TB NVMe SSD $100 (was $200)", item_id="same", url="https://x.com/s")
-        bot.process([a], state, {}, NOW, cfg(), sent.append)
-        b = deal("Samsung 990 PRO 2TB NVMe SSD $80 (was $200)", item_id="same", url="https://x.com/s")
-        bot.process([b], state, {}, NOW + 300, cfg(), sent.append)
+        a = deal("Samsung 990 PRO 2TB NVMe SSD $100 (was $200)", item_id="same", url="https://www.ebay.com/itm/s")
+        bot.process([a], state, {}, NOW, cfg(), lambda text, **kw: sent.append(text))
+        b = deal("Samsung 990 PRO 2TB NVMe SSD $80 (was $200)", item_id="same", url="https://www.ebay.com/itm/s")
+        bot.process([b], state, {}, NOW + 300, cfg(), lambda text, **kw: sent.append(text))
         self.assertEqual(len(sent), 2)
 
     def test_atomic_write(self):
