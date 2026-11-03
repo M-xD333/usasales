@@ -72,7 +72,7 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           PYTHONUNBUFFERED: "1"
         run: |
-          set -uo pipefail
+          set -euo pipefail
 
           persist=1
           if [ "$DRY_RUN" = "1" ] || [ -n "$SMOKE_FLAG" ]; then persist=0; fi
@@ -86,21 +86,12 @@ jobs:
 
           push_state() {
             [ "$persist" = "1" ] || return 0
-            [ -d data ] || return 0
-            git add data/
-            if git diff --cached --quiet; then return 0; fi
-            git commit -q -m "chore: persist deals-bot state"
-            if git push -q 2>/dev/null; then return 0; fi
-            echo "::warning::push rejected, rebasing and retrying once"
-            git pull --rebase -q origin "$GITHUB_REF_NAME" || return 0
-            git push -q 2>/dev/null || echo "::warning::push failed, keyingi iteratsiyada qayta urinamiz"
+            python workflow_git.py push
           }
 
           sync_code() {
-            # Tsikl uzun ishlaydi: yangi push qilingan kodni olib kelamiz
             [ "$persist" = "1" ] || return 0
-            git pull --rebase -q origin "$GITHUB_REF_NAME" 2>/dev/null \
-              || echo "::warning::code sync o'tmadi, eski checkout bilan davom etamiz"
+            python workflow_git.py sync
           }
 
           deadline=$(( $(date +%s) + LOOP_MINUTES * 60 ))
@@ -125,29 +116,21 @@ jobs:
 
       - name: Save state (safety net)
         if: always() && !(github.event_name == 'workflow_dispatch' && (inputs.mode == 'smoke' || inputs.dry_run))
-        run: |
-          if [ ! -d data ]; then
-            echo "No data directory; nothing to persist."
-            exit 0
-          fi
-          git config user.name "deals-bot"
-          git config user.email "deals-bot@users.noreply.github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "No state changes."
-            exit 0
-          fi
-          git commit -m "chore: persist deals-bot state"
-          if ! git push; then
-            echo "Push rejected, rebasing and retrying once"
-            git pull --rebase origin "$GITHUB_REF_NAME"
-            git push
-          fi
+        run: python workflow_git.py push
+
+      - name: Preserve state on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deals-state-${{ github.run_id }}
+          path: data/
+          retention-days: 7
+          if-no-files-found: ignore
 
       # Tsiklni cron'ga bog'lab qo'ymaslik uchun: o'zini qayta ishga tushiradi.
       # DISPATCH_PAT bo'lmasa — jim o'tkazib yuboradi va cron watchdog ishlaydi.
       - name: Chain next run
-        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.loop && inputs.mode == 'run'))
+        if: success() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.loop && inputs.mode == 'run'))
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
