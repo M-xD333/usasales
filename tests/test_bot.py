@@ -350,5 +350,43 @@ class SourceConfig(unittest.TestCase):
         self.assertEqual(sess.get.call_args.kwargs["headers"]["If-None-Match"], "abc")
 
 
+class RealTitles(unittest.TestCase):
+    """Заголовки из реального smoke-теста (Slickdeals, 2026-11-03)."""
+
+    def D(self, title):
+        return bot.make_deal(entry(title), src("curated"), NOW)
+
+    def test_store_in_brackets_is_not_category(self):
+        d = self.D("[Micro Center] PowerSpec G536 Gaming PC: Ryzen 5 7500X3D, RTX 5070 12GB, 32GB DDR5, 1TB SSD $1600 + Free Shipping")
+        self.assertEqual((d["cat"], d["tag"], d["store"], d["price"]), ("prebuilt", "", "Micro Center", 1600.0))
+        self.assertTrue(d["name"].startswith("PowerSpec"))
+
+    def test_laptop_without_word_laptop(self):
+        d = self.D('(Refurb) Dell Latitude 5450: Intel Ultra 7 165U 32GB RAM 256GB SSD 14" Touch W11P $518.39')
+        self.assertEqual((d["cat"], d["cond"], d["store"]), ("laptop", "Refurbished", ""))   # Dell — бренд, не магазин
+        d = self.D('$1699 | Acer Nitro Slim 16" AMD Ryzen AI 7 350, RTX 5070 Ti, 16GB RAM 512GB SSD')
+        self.assertEqual((d["cat"], d["price"]), ("laptop", 1699.0))
+        self.assertTrue(d["name"].startswith("Acer Nitro"))
+
+    def test_motherboard_with_wifi(self):
+        d = self.D("MSI MAG X870E Gaming Max WiFi AM5 ATX Motherboard $169.99 at Walmart")
+        self.assertEqual((d["cat"], d["store"]), ("mobo", "Walmart"))
+
+    def test_price_first_format(self):
+        d = self.D("$99* | 15.6″ ASUS ZenScreen 1080p USB-C Portable Monitor w/ Kickstand & Tripod Socket at Amazon")
+        self.assertEqual((d["cat"], d["price"], d["store"]), ("monitor", 99.0, "Amazon"))
+        self.assertNotIn("$", d["name"])
+
+    def test_from_price_and_non_tech(self):
+        d = self.D('[Open-Box YMMV] Lenovo Legion Go 8.8" Handheld PC Console w/ Ryzen Z1 Extreme: 512GB from $515; 1TB')
+        self.assertIsNone(d["price"])
+        self.assertEqual(d["issue"], "price_from")
+        self.assertEqual(self.D("150' Outdoor Basic 1080-LED Rope Lights (Various Colors) $30")["cat"], "other")
+
+    def test_plain_parts_unaffected(self):
+        self.assertEqual(self.D("Samsung 990 PRO 2TB NVMe M.2 SSD $119.99")["cat"], "ssd")
+        self.assertEqual(self.D("TP-Link AXE5400 Tri-Band WiFi 6E Router for $99 + free shipping")["cat"], "networking")
+
+
 if __name__ == "__main__":
     unittest.main()
