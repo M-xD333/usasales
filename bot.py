@@ -1,370 +1,709 @@
 #!/usr/bin/env python3
-"""r/buildapcsales -> Telegram deals bot (runs from GitHub Actions)."""
-import html, json, os, re, sys, time
-from collections import Counter
-from urllib.parse import quote_plus
+
+import html
+import json
+import os
+import re
+import statistics
+import sys
+import tempfile
+import time
+from collections import Counter, defaultdict
 from pathlib import Path
+
 import requests
-import feedparser
+
+import sources as S
 
 DATA = Path(__file__).parent / "data"
-DATA.mkdir(exist_ok=True)
-SEEN_F, HIST_F = DATA / "seen.json", DATA / "history.json"
+STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
 
-UA = "deals-bot/0.1 (personal project)"
-SUBREDDIT = os.environ.get("SUBREDDIT", "buildapcsales")
-MIN_SCORE = int(os.environ.get("MIN_SCORE", "8"))       # голоса для сделок без подтверждения историей
-MAX_POSTS = int(os.environ.get("MAX_POSTS", "8"))        # лимит публикаций за один запуск
-GIVE_UP_AFTER = 6 * 3600                                 # через 6ч перестаём ждать голосов
-HIST_DAYS = 90
-
-# категория: (мин. скидка %, мин. экономия $)
+# ============================== конфигурация ==============================
+# категория: (мин. скидка %, мин. экономия $). Переопределяется env RULES_JSON='{"ssd":[30,25]}'
 RULES = {
-    "gpu": (15, 40), "cpu": (20, 40), "mobo": (20, 30), "ram": (25, 20),
-    "ssd": (30, 25), "hdd": (25, 25), "monitor": (25, 50), "psu": (25, 20),
-    "case": (25, 20), "cooler": (25, 15), "prebuilt": (15, 100),
-    "laptop": (15, 100), "peripheral": (30, 20), "combo": (0, 0),
+    "gpu": (15, 40), "cpu": (20, 40), "mobo": (20, 30), "ram": (25, 20), "ssd": (30, 25),
+    "hdd": (25, 25), "ext_storage": (25, 20), "nas": (15, 40), "monitor": (25, 50),
+    "psu": (25, 20), "case": (25, 20), "cooler": (25, 15), "prebuilt": (15, 100),
+    "laptop": (15, 100), "minipc": (15, 50), "keyboard": (30, 15), "mouse": (30, 15),
+    "headset": (30, 15), "controller": (30, 15), "webcam": (30, 15), "networking": (25, 20),
+    "dock": (25, 15), "capture": (25, 25), "printer": (25, 30), "combo": (0, 0),
 }
 DEFAULT_RULE = (30, 20)
-CAT_KEYWORDS = [
-    ("combo", ("combo", "bundle")), ("gpu", ("gpu", "graphics", "video card")),
-    ("cpu", ("cpu", "processor")), ("mobo", ("motherboard", "mobo")),
-    ("ram", ("ram", "memory")), ("ssd", ("ssd", "nvme")),
-    ("hdd", ("hdd", "hard drive")), ("monitor", ("monitor",)),
-    ("psu", ("psu", "power supply")), ("case", ("case",)),
-    ("cooler", ("cooler", "cooling", "fan")), ("prebuilt", ("prebuilt", "desktop")),
-    ("laptop", ("laptop",)),
-    ("peripheral", ("keyboard", "mouse", "headset", "headphone", "controller")),
-]
+INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
+MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
 
-TITLE_HINTS = [
-    ("gpu", r"\brtx\b|geforce|radeon|\brx ?\d{4}|arc b\d{3}|graphics card|video card"),
-    ("cpu", r"ryzen|core (?:ultra|i[3579])|threadripper|\bcpu\b|processor"),
+
+def env_int(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def is_dry():
+    return os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+
+
+def get_cfg():
+    rules = dict(RULES)
+    try:
+        for k, v in json.loads(os.environ.get("RULES_JSON", "{}") or "{}").items():
+            rules[k] = (float(v[0]), float(v[1]))
+    except Exception:
+        print("[WARN] RULES_JSON не разобран, используются правила по умолчанию")
+    return {
+        "max_posts": env_int("MAX_POSTS_PER_RUN", env_int("MAX_POSTS", 8)),
+        "min_score": env_int("MIN_SCORE", 8),                 # ТОЛЬКО реальные голоса сообщества
+        "max_age_h": env_int("MAX_DEAL_AGE_HOURS", 12),
+        "hist_days": env_int("HIST_DAYS", 90),
+        "dup_hours": env_int("DUP_WINDOW_HOURS", 24),
+        "rules": rules,
+    }
+
+
+# ============================== разбор заголовков ==============================
+AMT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d{1,2})?)")
+CURRENCY_OTHER = re.compile(r"£|€|¥|₹|\bCAD\b|C\$|CA\$|\bAUD\b|A\$|\bGBP\b|\bEUR\b", re.I)
+ORIG_MARK = re.compile(r"(was|reg(?:ular)?\.?|msrp|list(?: price)?|orig(?:inal)?\.?|retail|normally|usually)\s*:?\s*$", re.I)
+QUALIFIER = re.compile(r"(from|starting at|starts at|as low as|up to)\s*$", re.I)
+COUPON_RX = re.compile(r"(?:after|w/|with|using)\s+(?:a\s+)?(?:clipped\s+)?coupon|clip(?:ping)?\s+(?:the\s+)?coupon|\bcoupon\b", re.I)
+PROMO_RX = re.compile(r"promo(?:tion)?\s+code|(?:w/|with|using|after)\s+code|\bcode[:\s]+[A-Z0-9]{4,20}\b", re.I)
+CODE_VAL = re.compile(r"\b[Cc]ode[:\s]+([A-Z0-9]{4,20})\b")
+PCT_OFF = re.compile(r"(\d{1,2})\s*%\s*off|-\s?(\d{1,2})\s*%", re.I)
+MEMBERSHIP_RX = re.compile(r"prime members?|members? only|membership|w/ prime|with prime|plus members?|rewards members?|student", re.I)
+CASHBACK_RX = re.compile(r"cash ?back|gift card|rebate|mail-in|store credit|kohl'?s cash|amazon credit", re.I)
+FREESHIP_RX = re.compile(r"free shipping|free s/h", re.I)
+
+
+def parse_prices(text):
+    """Разбор цен из заголовка. Если цену нельзя определить уверенно — price=None и issue."""
+    r = {"price": None, "original": None, "original_kind": None, "price_kind": "regular",
+         "code": None, "flags": set(), "issue": None}
+    if CURRENCY_OTHER.search(text):
+        r["issue"] = "non_usd"
+        return r
+    amts = [(float(m.group(1).replace(",", "")), m.start(), m.end()) for m in AMT.finditer(text)]
+    if not amts:
+        r["issue"] = "no_price"
+        return r
+    if re.search(AMT.pattern + r"\s*(?:-|–|—|to)\s*" + AMT.pattern + r"(?!\d)(?!\s*off)", text, re.I):
+        r["issue"] = "price_range"
+        return r
+
+    cands, origs, offs = [], [], []
+    for v, s, e in amts:
+        before, after = text[max(0, s - 16):s], text[e:e + 8]
+        m = ORIG_MARK.search(before)
+        if m:
+            kind = "MSRP" if m.group(1).lower().startswith(("msrp", "list")) else "was"
+            origs.append((v, kind))
+        elif re.match(r"^\s*off\b", after, re.I):
+            offs.append(v)
+        else:
+            cands.append((v, s))
+    if not cands:
+        r["issue"] = "no_price"
+        return r
+    if QUALIFIER.search(text[max(0, cands[0][1] - 16):cands[0][1]]):
+        r["issue"] = "price_from"
+        return r
+
+    has_coupon, has_code = bool(COUPON_RX.search(text)), bool(PROMO_RX.search(text))
+    if len(cands) > 1 and not (has_coupon or has_code):
+        r["issue"] = "multiple_prices"
+        return r
+    price = min(c[0] for c in cands)
+    r["price"] = price
+    if has_coupon:
+        r["price_kind"] = "coupon"
+    if has_code:
+        r["price_kind"] = "code"
+        m = CODE_VAL.search(text)
+        r["code"] = m.group(1) if m else None
+
+    if origs and origs[0][0] > price:
+        r["original"], r["original_kind"] = origs[0]
+    elif offs:
+        r["original"], r["original_kind"] = price + offs[0], "derived"
+    else:
+        pm = PCT_OFF.search(text)
+        if pm:
+            p = int(pm.group(1) or pm.group(2))
+            if 0 < p < 95:
+                r["original"], r["original_kind"] = price / (1 - p / 100), "derived"
+    if MEMBERSHIP_RX.search(text):
+        r["flags"].add("membership")
+    if CASHBACK_RX.search(text):
+        r["flags"].add("cashback")
+    if FREESHIP_RX.search(text):
+        r["flags"].add("free_shipping")
+    r["first_price_pos"] = cands[0][1]
+    return r
+
+
+def split_tag(title):
+    m = re.match(r"\s*\[([^\]]+)\]\s*(.*)", title)
+    return (m.group(1).strip(), m.group(2)) if m else ("", title)
+
+
+def clean_name(text, pos=None):
+    name = text[:pos] if pos else text
+    name = name.rstrip(" -–—|:(+,")
+    name = re.sub(r"\s+(?:for|at|from|only|now|starting at|just)$", "", name, flags=re.I)
+    return name.strip() or text.strip()
+
+
+# ============================== категории / состояние / магазины ==============================
+TAG_MAP = {"gpu": "gpu", "cpu": "cpu", "motherboard": "mobo", "mobo": "mobo", "ram": "ram", "ssd": "ssd",
+           "hdd": "hdd", "monitor": "monitor", "psu": "psu", "case": "case", "cooler": "cooler",
+           "prebuilt": "prebuilt", "laptop": "laptop", "combo": "combo", "nas": "nas", "mouse": "mouse",
+           "keyboard": "keyboard", "headset": "headset", "controller": "controller", "webcam": "webcam",
+           "networking": "networking", "router": "networking", "fans": "cooler"}
+# порядок важен: специфичное раньше общего (ноутбук с RTX — это laptop, а не gpu)
+CLASSIFY = [
+    ("laptop", r"\blaptop|notebook|chromebook|macbook|ultrabook"),
+    ("minipc", r"mini[- ]pc|\bnuc\b|mini desktop"),
+    ("prebuilt", r"gaming pc|gaming desktop|prebuilt|all-in-one pc|desktop pc|desktop computer"),
+    ("nas", r"\bnas\b|network attached"),
+    ("ext_storage", r"external (?:ssd|hard drive|hdd|drive|storage)|portable ssd|flash drive|usb drive|micro ?sd|sd card|memory card"),
+    ("networking", r"router|wi-?fi|mesh|network switch|ethernet switch|\bnic\b|network card|access point|\bmodem\b|powerline"),
+    ("capture", r"capture card"),
+    ("dock", r"docking station|\bdock\b|usb[- ]?c? hub|\busb hub|thunderbolt dock|\badapter\b"),
+    ("webcam", r"webcam"),
+    ("gpu", r"\brtx\b|geforce|radeon|\brx ?\d{4}|arc [ab]\d{3}|graphics card|video card|\bgpu\b"),
+    ("cpu", r"ryzen|core (?:ultra|i[3579])|threadripper|\bcpu\b|(?<!food )processor"),
     ("mobo", r"motherboard"),
-    ("ram", r"\bddr[345]\b|\bram\b|\bdram\b"),
+    ("ram", r"\bddr[345]\b|\bram\b|\bdram\b|memory kit"),
     ("ssd", r"\bssd\b|nvme|\bm\.2\b|solid state"),
-    ("hdd", r"hard drive|\bhdd\b|ironwolf|barracuda|exos"),
+    ("hdd", r"hard drive|\bhdd\b|ironwolf|barracuda|\bexos\b"),
     ("monitor", r"monitor"),
     ("psu", r"power supply|\bpsu\b"),
-    ("cooler", r"cpu cooler|\baio\b|liquid cooler"),
+    ("cooler", r"cpu cooler|\baio\b|liquid cooler|case fans?"),
     ("case", r"pc case|computer case|mid tower|full tower"),
-    ("prebuilt", r"gaming pc|gaming desktop"),
-    ("laptop", r"laptop"),
-    ("peripheral", r"keyboard|\bmouse\b|headset"),
+    ("keyboard", r"keyboard"), ("mouse", r"\bmouse\b|\bmice\b"),
+    ("headset", r"headset|headphones"), ("controller", r"gamepad|controller"),
+    ("printer", r"printer"),
 ]
+CLASSIFY_RX = [(c, re.compile(rx, re.I)) for c, rx in CLASSIFY]
+REVIEW_HINT = re.compile(r"\btv\b|television|camera|tablet|ipad|phone|earbuds|airpods|speaker|soundbar|smartwatch|drone|kindle|usb|charger|power bank", re.I)
+
+KNOWN_STORES = ["Amazon", "Newegg", "Best Buy", "Walmart", "Micro Center", "B&H", "Woot", "eBay", "Dell", "HP",
+                "Lenovo", "Costco", "Corsair", "Samsung", "Target", "Adorama", "Antonline", "Staples", "Office Depot"]
+STORE_RX = [(s, re.compile(r"(?<![A-Za-z])" + re.escape(s) + r"(?![A-Za-z])", re.I)) for s in KNOWN_STORES]
+STORE_FALLBACK = re.compile(r"(?:@|\bat\b|\bfrom\b|\bvia\b)\s+([A-Z][\w.&' -]{1,30}?)(?=\s*(?:\+|\(|\[|,|$|w/|with|after|\bfor\b))")
+ASIN_RX = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})\b")
+STOPWORDS = {"new", "free", "shipping", "w", "with", "after", "coupon", "code", "prime", "member", "members",
+             "at", "for", "from", "the", "and", "a", "an", "of", "deal", "sale"}
 
 
-def detect_cat_from_title(title):
-    t = title.lower()
-    for cat, rx in TITLE_HINTS:
-        if re.search(rx, t):
+def classify(text, tag=""):
+    t = (tag or "").strip().lower()
+    if t in TAG_MAP:
+        return TAG_MAP[t]
+    for cat, rx in CLASSIFY_RX:
+        if rx.search(text):
             return cat
-    return "other"
-
-
-NUM = r"(\d[\d,]*(?:\.\d+)?)"
-def num(s): return float(s.replace(",", ""))
-
-
-def detect_cat(tag):
-    t = tag.lower()
-    for cat, kws in CAT_KEYWORDS:
-        if any(k in t for k in kws):
-            return cat
-    return "other"
+    return "review" if REVIEW_HINT.search(text) else "other"
 
 
 def detect_condition(text):
     t = text.lower()
-    if re.search(r"refurb|renewed|recertified|reconditioned", t): return "refurbished"
-    if "open box" in t or "open-box" in t: return "open box"
-    if re.search(r"\bused\b|pre-owned", t): return "used"
-    return "new"
+    if re.search(r"refurb|renewed|recertified|reconditioned", t):
+        return "Refurbished"
+    if "open box" in t or "open-box" in t:
+        return "Open Box"
+    if re.search(r"\bused\b|pre-owned", t):
+        return "Used"
+    return "New"
 
 
-def parse(post):
-    """Разбор заголовка вида: [SSD] Samsung 990 Pro 2TB - $119.99 (was $199) @ Amazon"""
-    title = html.unescape(post["title"]).strip()
-    m = re.match(r"\s*\[([^\]]+)\]\s*(.*)", title)
-    tag, rest = (m.group(1), m.group(2)) if m else (post.get("link_flair_text") or "", title)
-    cat = detect_cat(tag or post.get("link_flair_text") or "")
-    if cat == "other":
-        cat = detect_cat_from_title(title)
-    pm = re.search(r"\$\s?" + NUM, rest)
-    if not pm:
-        return None
-    price = num(pm.group(1))
-    name = rest[:pm.start()].rstrip(" -–—|:(").strip() or rest
-    name = re.sub(r"\s+(?:for|at|from|only|now|starting at)$", "", name, flags=re.I)
-    tail = rest[pm.end():]
+def detect_store(text):
+    for name, rx in STORE_RX:
+        if rx.search(text):
+            return name
+    m = STORE_FALLBACK.search(text)
+    return m.group(1).strip() if m else ""
 
-    was = None
-    wm = re.search(r"(?:was|reg(?:ular)?\.?|msrp|list|orig(?:inal)?|retail)\s*:?\s*\$\s?" + NUM, tail, re.I)
-    if wm:
-        was = num(wm.group(1))
-    else:
-        om = re.search(r"\$\s?" + NUM + r"\s*off", tail, re.I)
-        pc = re.search(r"(\d{1,2})%\s*off|-\s?(\d{1,2})%", tail, re.I)
-        if om:
-            was = price + num(om.group(1))
-        elif pc:
-            p = int(pc.group(1) or pc.group(2))
-            if 0 < p < 95:
-                was = price / (1 - p / 100)
 
-    sm = re.search(r"(?:@|\bat\b|\bfrom\b|\bvia\b)\s+([A-Z][\w .&'-]{1,30}?)(?:\s*(?:\+|\(|\[|,|$))", tail)
-    store = sm.group(1).strip() if sm else ""
-    key = re.sub(r"[^a-z0-9 ]", " ", name.lower())
-    key = re.sub(r"\s+", " ", key).strip()
+def name_key(name):
+    s = re.sub(r"[^a-z0-9. ]", " ", name.lower())
+    return " ".join(t for t in s.split() if t not in STOPWORDS)
+
+
+def make_deal(entry, source, now):
+    """entry (нормализованная запись) -> словарь сделки (JSON-совместимый)."""
+    title = html.unescape(entry["title"]).strip()
+    tag, rest = split_tag(title)
+    pi = parse_prices(rest)
+    cat = classify(rest, tag or entry.get("flair", ""))
+    name = clean_name(rest, pi.get("first_price_pos"))
+    asin_m = ASIN_RX.search(entry["url"] or "") or ASIN_RX.search(entry.get("summary", ""))
+    asin = asin_m.group(1) if asin_m else None
+    cond = detect_condition(title)
+    ts = entry.get("published_ts")
+    undated = ts is None
+    if undated and source.allow_undated:
+        ts = now
     return {
-        "id": post["id"], "title": title, "tag": tag, "cat": cat, "name": name,
-        "key": key, "price": price, "was": was, "store": store,
-        "cond": detect_condition(title), "url": post.get("url") or "",
-        "discuss": post.get("discuss_url") or "https://www.reddit.com" + post.get("permalink", ""),
-        "score": int(post.get("score") or 0), "created": float(post.get("created_utc") or time.time()),
-        "flair": (post.get("link_flair_text") or "").lower(),
+        "id": entry["item_id"], "source_id": source.id, "source": source.name, "trust": source.trust,
+        "publish": source.publish, "title": title, "tag": tag, "name": name, "cat": cat,
+        "price": pi["price"], "issue": pi["issue"], "original": pi["original"],
+        "original_kind": pi["original_kind"], "price_kind": pi["price_kind"], "code": pi["code"],
+        "flags": sorted(pi["flags"]), "cond": cond, "store": detect_store(rest),
+        "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
+        "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
+        "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
     }
 
 
-def evaluate(d, samples):
-    """samples: [[ts, price, post_id], ...] история этого товара. Возвращает (ok, info)."""
-    prices = [p for _, p, pid in samples if pid != d["id"]]
-    confirmed = len(prices) >= 2
-    price, claimed = d["price"], d["was"]
-    ref, kind = None, None
-
-    if claimed and claimed > price:
-        ref, kind = claimed, "claimed"
-        if confirmed:
-            cap = max(prices) * 1.15
-            if claimed > cap:                      # «раздутая» старая цена
-                ref, kind = cap, "capped"
-    elif confirmed:
-        ref, kind = max(prices), "history"
-
-    new_low = confirmed and price < min(prices) * 0.98
-    info = {"ref": ref, "kind": kind, "pct": 0, "sav": 0, "new_low": new_low, "inflated": kind == "capped", "reason": ""}
-
-    if d["cat"] == "combo":
-        need = MIN_SCORE * 2
-        info["reason"] = f"комбо: рейтинг {d['score']}/{need}"
-        return d["score"] >= need, info
-    if ref is None or ref <= price:
-        need = MIN_SCORE * 3
-        info["reason"] = f"нет старой цены, рейтинг {d['score']}/{need}, замеров в истории {len(prices)}"
-        return (d["score"] >= need) or new_low, info
-
-    info["pct"] = (ref - price) / ref * 100
-    info["sav"] = ref - price
-    min_pct, min_sav = RULES.get(d["cat"], DEFAULT_RULE)
-    passes = info["pct"] >= min_pct and info["sav"] >= min_sav
-    if not passes:
-        info["reason"] = f"скидка {info['pct']:.0f}% / ${info['sav']:.0f} ниже порога {min_pct}% / ${min_sav}"
-    elif not (confirmed or d["score"] >= MIN_SCORE):
-        info["reason"] = f"ждёт подтверждения: рейтинг {d['score']}/{MIN_SCORE}"
-    return passes and (confirmed or d["score"] >= MIN_SCORE), info
+def hist_key(d):
+    return f"{d['ident']}|{d['cond']}"
 
 
-def fmt_price(x): return f"${x:,.2f}".replace(".00", "")
+def dup_key(d):
+    return f"{d['ident']}|{d['cond']}|{d['price']}"
+
+
+# ============================== история цен и оценка ==============================
+def hist_stats(samples, now, hist_days, exclude_pid=None):
+    cutoff = now - hist_days * 86400
+    prices = [s[1] for s in samples if s[0] >= cutoff and s[2] != exclude_pid]
+    n = len(prices)
+    return {"n": n, "median": statistics.median(prices) if n else None,
+            "min": min(prices) if n else None, "max": max(prices) if n else None}
+
+
+def add_sample(samples, d, now):
+    pid = d["id"]
+    if any(s[2] == pid and s[1] == d["price"] for s in samples):
+        return
+    if any(s[1] == d["price"] and now - s[0] < 12 * 3600 for s in samples):  # та же цена из другой ленты
+        return
+    samples.append([now, d["price"], pid, d["source_id"]])
+
+
+def assess(d, stats, cfg, now):
+    """Решение о публикации. Возвращает (ok, info). info['reason'] — причина отказа/ожидания."""
+    info = {"claimed": None, "pct": 0.0, "sav": 0.0, "claim_bad": False, "median_pct": None,
+            "new_low_obs": False, "reason": "", "final": False}
+
+    def no(reason, final=False):
+        info["reason"], info["final"] = reason, final
+        return False, info
+
+    if not d["publish"]:
+        return no("источник только для наблюдений", True)
+    if d["price"] is None:
+        return no(f"цена не определена ({d['issue']})", True)
+    if d["cat"] in ("other", "review"):
+        return no("категория не распознана", True)
+    if d["expired"]:
+        return no("сделка помечена как expired/sold out", True)
+    if d["published_ts"] is None:
+        return no("нет даты публикации", True)
+    age_h = (now - d["published_ts"]) / 3600
+    if age_h > cfg["max_age_h"]:
+        return no(f"старше {cfg['max_age_h']} ч", True)
+
+    min_pct, min_sav = cfg["rules"].get(d["cat"], DEFAULT_RULE)
+    price, orig = d["price"], d["original"]
+    n, med = stats["n"], stats["median"]
+
+    if orig and orig > price:
+        pct, sav = (orig - price) / orig * 100, orig - price
+        suspicious = pct > MAX_SANE_DISCOUNT or (n >= 3 and med and orig > INFLATE_FACTOR * med)
+        if suspicious:
+            info["claim_bad"] = True
+        else:
+            info.update(claimed=orig, pct=pct, sav=sav)
+    strong_claim = info["claimed"] is not None and info["pct"] >= min_pct and info["sav"] >= min_sav
+
+    strong_obs = False
+    if n >= 3 and med:
+        info["median_pct"] = (med - price) / med * 100
+        info["new_low_obs"] = price < stats["min"]
+        strong_obs = info["median_pct"] >= min_pct and (med - price) >= min_sav
+
+    trust, score = d["trust"], d["community_score"]
+    if trust == "community":
+        if score is None:
+            return no("нет реальных голосов сообщества")
+        need = cfg["min_score"] * (2 if d["cat"] == "combo" else 1)
+        if score < need:
+            return no(f"голоса {score}/{need}")
+        if d["cat"] == "combo" or strong_claim or strong_obs or score >= 3 * cfg["min_score"]:
+            return True, info
+        return no(f"нет подтверждённой скидки (голоса {score})")
+    if trust == "curated":
+        if info["claimed"] is not None and not strong_claim:
+            return no(f"скидка {info['pct']:.0f}% / ${info['sav']:.0f} ниже порога {min_pct:g}% / ${min_sav:g}")
+        return True, info
+    # editorial / unvetted: нужна подтверждённая скидка
+    if strong_claim or strong_obs:
+        return True, info
+    if info["claim_bad"]:
+        return no("заявленная старая цена выглядит завышенной")
+    if info["claimed"] is not None:
+        return no(f"скидка {info['pct']:.0f}% / ${info['sav']:.0f} ниже порога {min_pct:g}% / ${min_sav:g}")
+    return no(f"нет подтверждения скидки (наблюдений цены: {n})")
+
+
+# ============================== сообщение ==============================
+def fmt_price(x):
+    return f"${x:,.2f}".replace(".00", "")
+
+
+def safe_url(u):
+    u = (u or "").strip()
+    return u if re.match(r"^https?://[^\s<>\"]+$", u) else None
 
 
 def build_message(d, info):
     e = html.escape
-    lines = [f"📦 <b>[{e(d['tag'] or d['cat'].upper())}] {e(d['name'])}</b>", ""]
-    if info["ref"] and info["ref"] > d["price"]:
-        lines.append(f"💰 Цена: <b>{fmt_price(d['price'])}</b> (было ~{fmt_price(info['ref'])}, −{info['pct']:.0f}%)")
-    else:
-        lines.append(f"💰 Цена: <b>{fmt_price(d['price'])}</b>")
+    name = d["name"] if len(d["name"]) <= 180 else d["name"][:177] + "…"
+    lines = [f"📦 <b>[{e(d['tag'] or d['cat'].upper())}] {e(name)}</b>", ""]
+    price_line = f"💰 Цена: <b>{fmt_price(d['price'])}</b>"
+    if d["price_kind"] == "coupon":
+        price_line += " (с купоном)"
+    elif d["price_kind"] == "code":
+        price_line += f" (по промокоду{' ' + e(d['code']) if d['code'] else ''})"
+    if info["claimed"]:
+        label = "MSRP" if d["original_kind"] == "MSRP" else "было"
+        price_line += f" ({label} {fmt_price(info['claimed'])}, −{info['pct']:.0f}%)"
+    lines.append(price_line)
     lines.append(f"⚠️ Условие: {d['cond']}")
     if d["store"]:
         lines.append(f"🏪 Магазин: {e(d['store'])}")
-    if info["new_low"]:
-        lines.append("🔥 Новый минимум по нашей истории цен")
-    if info["inflated"]:
-        lines.append("ℹ️ Заявленная «старая» цена завышена, скидка пересчитана")
-    if d["score"] and d.get("source") in (None, "Reddit"):
-        lines.append(f"👍 Рейтинг на Reddit: {d['score']}")
-    if d.get("source"):
-        lines.append(f"🔎 Источник: {html.escape(d['source'])}")
-    lines += ["", f"👉 <a href=\"{html.escape(d['url'], quote=True)}\">СМОТРЕТЬ В МАГАЗИНЕ</a>"]
-    if d["discuss"] and d["discuss"] != d["url"]:
-        lines.append(f"💬 <a href=\"{html.escape(d['discuss'], quote=True)}\">Обсуждение</a>")
+    if info["median_pct"] is not None and info["median_pct"] >= 10:
+        lines.append(f"📉 Ниже медианы наших наблюдений на {info['median_pct']:.0f}%")
+    if info["new_low_obs"]:
+        lines.append("🔥 Минимум среди наших наблюдений")
+    if "membership" in d["flags"]:
+        lines.append("ℹ️ Нужна подписка/членство")
+    if "cashback" in d["flags"]:
+        lines.append("ℹ️ Часть выгоды — кэшбэк/подарочная карта/ребейт")
+    if d["community_score"] is not None:
+        lines.append(f"👍 Голоса сообщества: {d['community_score']}")
+    lines.append(f"🔎 Источник: {e(d['source'])}")
+    lines.append("")
+    url = safe_url(d["url"])
+    lines.append(f"👉 <a href=\"{e(url, quote=True)}\">СМОТРЕТЬ В МАГАЗИНЕ</a>")
+    disc = safe_url(d["discuss"])
+    if disc and disc != url:
+        lines.append(f"💬 <a href=\"{e(disc, quote=True)}\">Обсуждение</a>")
     link = os.environ.get("CHANNEL_LINK", "")
     if link:
-        lines += ["", "———————————————", f"📢 Ссылка для друзей: {html.escape(link)}"]
-    return "\n".join(lines)
+        lines += ["", "———————————————", f"📢 Ссылка для друзей: {e(link)}"]
+    text = "\n".join(lines)
+    return text if len(text) <= 4000 else text[:3990] + "…"
 
 
-def tg_send(text):
+# ============================== Telegram ==============================
+class TelegramError(Exception):
+    def __init__(self, msg, fatal=False, permanent=False, ambiguous=False):
+        super().__init__(msg)
+        self.fatal, self.permanent, self.ambiguous = fatal, permanent, ambiguous
+
+
+def redact(text):
+    tok = os.environ.get("TG_BOT_TOKEN", "")
+    return str(text).replace(tok, "***") if tok else str(text)
+
+
+def tg_send(text, session=requests, sleep=time.sleep):
+    """Отправка с retry. Остаточный риск: если ответ потерян после доставки (read timeout),
+    сообщение помечается ambiguous и НЕ отправляется повторно (лучше пропуск, чем дубль)."""
     token, chat = os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"]
-    for _ in range(3):
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                          json={"chat_id": chat, "text": text, "parse_mode": "HTML",
-                                "disable_web_page_preview": False}, timeout=20)
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": False}
+    last = "неизвестная ошибка"
+    for attempt in range(4):
+        try:
+            r = session.post(url, json=payload, timeout=(5, 20))
+        except requests.exceptions.ReadTimeout:
+            raise TelegramError("таймаут чтения: сообщение могло быть доставлено", ambiguous=True)
+        except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout) as ex:
+            last = redact(f"сетевая ошибка: {type(ex).__name__}")
+            sleep(2 ** attempt)
+            continue
+        except requests.exceptions.RequestException as ex:
+            raise TelegramError(redact(f"ошибка запроса: {type(ex).__name__}"), permanent=True)
+        try:
+            data = r.json()
+        except ValueError:
+            data = {}
+        if r.status_code == 200 and data.get("ok"):
+            return data
+        desc = str(data.get("description", ""))[:200]
         if r.status_code == 429:
-            time.sleep(r.json().get("parameters", {}).get("retry_after", 5) + 1)
+            wait = min(int(data.get("parameters", {}).get("retry_after", 5)), 60) + 1
+            last = f"429, ждём {wait} с"
+            sleep(wait)
             continue
-        r.raise_for_status()
-        return
-    raise RuntimeError("Telegram: слишком много попыток")
-
-
-BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-# (имя, url, "оценка сообщества", которую присваиваем сделкам из этой ленты)
-SD = "https://slickdeals.net/newsearch.php"
-SEARCH_TERMS = ["ssd", "nvme", "rtx", "radeon", "ryzen", "ddr5", "graphics card", "motherboard", "monitor"]
-FEEDS = [
-    # (имя, url, оценка, присваиваемая записям; «отобрано сообществом/редакцией» = высокая)
-    ("Slickdeals frontpage", SD + "?mode=frontpage&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
-    ("Slickdeals popular", SD + "?mode=popdeals&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
-    ("Slickdeals hot", SD + "?searchin=first&forumchoice%5B%5D=9&rss=1", MIN_SCORE),
-    ("DealNews Computers", "https://www.dealnews.com/c39/Computers/?rss=1", MIN_SCORE * 4),
-] + [
-    (f"Slickdeals: {t}", SD + "?rss=1&q=" + quote_plus(t) + "&searcharea=deals&searchin=first&isUserSearch=1", MIN_SCORE)
-    for t in SEARCH_TERMS
-]
-
-
-def fetch_feed(name, url, score):
-    r = requests.get(url, headers={"User-Agent": BROWSER_UA}, timeout=20)
-    r.raise_for_status()
-    out = []
-    for e in feedparser.parse(r.content).entries:
-        ts = time.mktime(e.published_parsed) if getattr(e, "published_parsed", None) else time.time()
-        link = e.get("link", "")
-        out.append({"id": e.get("id") or link, "title": e.get("title", ""), "url": link,
-                    "discuss_url": link, "score": score, "created_utc": ts,
-                    "link_flair_text": "", "source": name})
-    return out
-
-
-def fetch_all():
-    posts, ok = [], 0
-    for name, url, score in FEEDS:
-        try:
-            got = fetch_feed(name, url, score)
-            ok += 1
-            print(f"[{name}] получено записей: {len(got)}")
-            posts += got
-            time.sleep(1)
-        except Exception as ex:
-            print(f"[{name}] ОШИБКА: {ex}")
-            time.sleep(1)
-    if os.environ.get("REDDIT_CLIENT_ID"):
-        try:
-            got = fetch_reddit()
-            ok += 1
-            print(f"[reddit] получено записей: {len(got)}")
-            posts += got
-        except Exception as ex:
-            print(f"[reddit] ОШИБКА: {ex}")
-    if ok == 0:
-        raise SystemExit("Все источники недоступны")
-    return posts
-
-
-def fetch_reddit():
-    cid, sec = os.environ.get("REDDIT_CLIENT_ID"), os.environ.get("REDDIT_CLIENT_SECRET")
-    headers = {"User-Agent": UA}
-    if cid and sec:
-        r = requests.post("https://www.reddit.com/api/v1/access_token", auth=(cid, sec),
-                          data={"grant_type": "client_credentials"}, headers=headers, timeout=20)
-        r.raise_for_status()
-        headers["Authorization"] = "bearer " + r.json()["access_token"]
-        url = f"https://oauth.reddit.com/r/{SUBREDDIT}/new"
-    else:
-        url = f"https://www.reddit.com/r/{SUBREDDIT}/new.json"
-    r = requests.get(url, params={"limit": 50, "raw_json": 1}, headers=headers, timeout=20)
-    r.raise_for_status()
-    return [c["data"] for c in r.json()["data"]["children"]]
-
-
-def load(p, default):
-    try: return json.loads(p.read_text())
-    except Exception: return default
-
-
-def main():
-    dry = os.environ.get("DRY_RUN") == "1"
-    now = time.time()
-    seen, hist = load(SEEN_F, {}), load(HIST_F, {})
-    st = Counter()
-    waiting = []
-
-    posts = fetch_all()
-    # одна и та же сделка может прийти из нескольких лент: убираем дубли по id
-    uniq = {}
-    for p in posts:
-        uniq.setdefault(p["id"], p)
-    st["всего записей"] = len(posts)
-    st["уникальных"] = len(uniq)
-
-    for post in sorted(uniq.values(), key=lambda p: p["created_utc"]):
-        pid = post["id"]
-        if pid in seen:
-            st["уже обработаны ранее"] += 1
+        if r.status_code >= 500:
+            last = f"HTTP {r.status_code}"
+            sleep(2 ** attempt)
             continue
-        d = parse(post)
-        if d is None:
-            st["без цены в заголовке"] += 1
-            seen[pid] = now
+        fatal = r.status_code in (401, 403, 404) or "chat not found" in desc.lower()
+        raise TelegramError(f"Telegram HTTP {r.status_code}: {desc}", fatal=fatal, permanent=True)
+    raise TelegramError(f"Telegram недоступен после повторов: {last}")
+
+
+# ============================== состояние (атомарная запись) ==============================
+def atomic_write_json(path, obj):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(obj, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def _load(path, default):
+    try:
+        return json.loads(Path(path).read_text())
+    except Exception:
+        return default
+
+
+def load_state():
+    st = _load(DATA / STATE_F, None)
+    if st is None:  # миграция со старой версии (seen.json)
+        old = _load(DATA / LEGACY_SEEN_F, {})
+        st = {"version": 2, "processed": {k: v for k, v in old.items() if not k.startswith("k:")},
+              "posted": {}, "pending": {}, "sources": {}, "review": []}
+    for k, default in (("processed", {}), ("posted", {}), ("pending", {}), ("sources", {}), ("review", [])):
+        st.setdefault(k, default)
+    return st
+
+
+def trim_state(st, now, cfg):
+    st["posted"] = {k: v for k, v in st["posted"].items() if now - v < max(cfg["dup_hours"], 24) * 3600 * 2}
+    st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
+    st["review"] = st["review"][-100:]
+
+
+def prune_history(hist, now, days):
+    cutoff = now - days * 86400
+    out = {k: [s for s in v if s[0] >= cutoff] for k, v in hist.items()}
+    return {k: v for k, v in out.items() if v}
+
+
+# ============================== основной цикл ==============================
+def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print):
+    """Обработка сделок. Возвращает (stats, per_source, waiting, fatal)."""
+    stats, per_src, waiting, fatal = Counter(), defaultdict(Counter), [], False
+    save_state = save_state or (lambda s: None)
+    save_hist = save_hist or (lambda h: None)
+
+    pending = state["pending"]
+    state["pending"] = {}
+    known = {(d["id"], d["price"]) for d in deals}
+    for d in pending.values():          # отложенные лимитом в прошлый запуск (новый запуск мог получить 304)
+        if (d["id"], d["price"]) not in known:
+            deals.append(d)
+
+    deals.sort(key=lambda d: d["published_ts"] or 0, reverse=True)   # сначала новые
+    transient_fails = 0
+
+    for d in deals:
+        sid = d["source_id"]
+        pkey = f"{d['id']}@{d['price']}"           # смена цены у той же записи = новая оценка
+        if pkey in state["processed"]:
+            stats["уже обработаны"] += 1
+            continue
+        if d["cat"] == "review":
+            state["review"].append({"title": d["title"], "url": d["url"], "source": d["source"]})
+            state["processed"][pkey] = now
+            stats["неизвестная категория (в очередь проверки)"] += 1
+            per_src[sid]["очередь проверки"] += 1
             continue
         if d["cat"] == "other":
-            st["не комплектующие"] += 1
-            seen[pid] = now
+            state["processed"][pkey] = now
+            stats["не комплектующие"] += 1
+            per_src[sid]["не комплектующие"] += 1
             continue
-        if "expired" in d["flair"]:
-            st["expired"] += 1
-            seen[pid] = now
-            continue
-        d["source"] = post.get("source", "Reddit")
-        st["железо, оценено"] += 1
-
-        dup_key = f"k:{d['key']}|{d['price']}"
-        if dup_key in seen and now - seen[dup_key] < 86400:
-            st["дубль (тот же товар и цена за 24ч)"] += 1
-            seen[pid] = now
+        if d["price"] is None:
+            state["processed"][pkey] = now
+            stats["цена не определена"] += 1
+            per_src[sid][f"цена: {d['issue']}"] += 1
             continue
 
-        samples = hist.setdefault(d["key"], [])
-        ok, info = evaluate(d, samples)
-        if not any(s[2] == pid for s in samples):
-            samples.append([now, d["price"], pid])
+        samples = hist.setdefault(hist_key(d), [])
+        stats_h = hist_stats(samples, now, cfg["hist_days"], exclude_pid=d["id"])
+        ok, info = assess(d, stats_h, cfg, now)
+        add_sample(samples, d, now)
+        per_src[sid]["оценено"] += 1
 
-        if ok and st["опубликовано"] < MAX_POSTS:
-            msg = build_message(d, info)
-            print(msg, "\n" + "=" * 40) if dry else tg_send(msg)
-            seen[pid] = now
-            seen[dup_key] = now
-            st["опубликовано"] += 1
-        elif ok:
-            st["отложено (лимит за запуск)"] += 1
-        elif now - d["created"] > GIVE_UP_AFTER:
-            seen[pid] = now
-            st["отброшено по возрасту"] += 1
-        else:
-            st["ждут"] += 1
-            waiting.append(f"  • [{d['cat']}] {d['name'][:60]} — ${d['price']:g} ({d['source']}): {info['reason']}")
+        dk = dup_key(d)
+        if ok and now - state["posted"].get(dk, 0) < cfg["dup_hours"] * 3600:
+            state["processed"][pkey] = now
+            stats["дубль за окно"] += 1
+            per_src[sid]["дубли"] += 1
+            continue
 
-    cutoff = now - HIST_DAYS * 86400
-    hist = {k: [s for s in v if s[0] > cutoff] for k, v in hist.items()}
-    hist = {k: v for k, v in hist.items() if v}
-    seen = dict(sorted(seen.items(), key=lambda kv: kv[1])[-3000:])
-    if not dry:
-        SEEN_F.write_text(json.dumps(seen))
-        HIST_F.write_text(json.dumps(hist))
+        if not ok:
+            if info["final"]:
+                state["processed"][pkey] = now
+                stats["отклонено окончательно"] += 1
+                per_src[sid][f"откл.: {info['reason']}"] += 1
+            else:
+                stats["ждут"] += 1
+                per_src[sid]["ждут"] += 1
+                waiting.append(f"  • [{d['cat']}] {d['name'][:55]} — {fmt_price(d['price'])} ({d['source']}): {info['reason']}")
+            continue
 
+        if stats["опубликовано"] >= cfg["max_posts"]:
+            state["pending"][pkey] = d             # не теряем: уйдёт в следующем запуске, пока свежее
+            stats["отложено лимитом"] += 1
+            continue
+        if not safe_url(d["url"]):
+            state["processed"][pkey] = now
+            stats["нет корректной ссылки"] += 1
+            continue
+
+        msg = build_message(d, info)
+        if dry:
+            log(msg + "\n" + "=" * 40)
+            stats["опубликовано"] += 1
+            continue
+        try:
+            send(msg)
+        except TelegramError as ex:
+            if ex.ambiguous:      # возможно доставлено: помечаем, чтобы не плодить дубли
+                log(f"[WARN] {ex}; помечаю как отправленное (риск пропуска вместо дубля)")
+                state["processed"][pkey], state["posted"][dk] = now, now
+                save_state(state)
+                stats["неоднозначно (возможно доставлено)"] += 1
+                continue
+            log(f"[ERROR] отправка не удалась: {redact(ex)}")
+            stats["ошибки отправки"] += 1
+            if ex.fatal:
+                fatal = True
+                break
+            if ex.permanent:  # ошибка именно этого сообщения: не зацикливаемся
+                state["processed"][pkey] = now
+                save_state(state)
+                continue
+            transient_fails += 1
+            if transient_fails >= 2:
+                log("[ERROR] Telegram недоступен, прерываю отправку до следующего запуска")
+                break
+            continue
+        # подтверждённый успех -> checkpoint сразу
+        state["processed"][pkey], state["posted"][dk] = now, now
+        save_state(state)
+        stats["опубликовано"] += 1
+        per_src[sid]["опубликовано"] += 1
+
+    save_hist(hist)
+    return stats, per_src, waiting, fatal
+
+
+def print_report(results, per_src, stats, waiting, hist):
+    print("\n===== ИСТОЧНИКИ =====")
+    for r in results:
+        s = r.source
+        newest = max((e["published_ts"] for e in r.entries if e["published_ts"]), default=None)
+        age = f"{(time.time() - newest) / 3600:.1f} ч" if newest else "—"
+        status = "304 (без изменений)" if r.not_modified else (f"HTTP {r.status}" if r.status else "нет ответа")
+        err = f" | ОШИБКА: {redact(r.error)}" if r.error else ""
+        c = per_src.get(s.id, Counter())
+        details = ", ".join(f"{k} {v}" for k, v in c.items())
+        print(f"[{s.id}] {status} | записей {len(r.entries)} | свежайшая {age} | {r.seconds:.1f} с{err}")
+        if details:
+            print(f"     {details}")
     print("\n===== ИТОГ ЗАПУСКА =====")
-    for k in ["всего записей", "уникальных", "уже обработаны ранее", "без цены в заголовке",
-              "не комплектующие", "expired", "железо, оценено", "дубль (тот же товар и цена за 24ч)",
-              "ждут", "отброшено по возрасту", "отложено (лимит за запуск)", "опубликовано"]:
-        if st[k] or k in ("всего записей", "опубликовано"):
-            print(f"{k}: {st[k]}")
-    print(f"товаров в истории цен: {len(hist)}")
+    for k, v in stats.most_common():
+        print(f"{k}: {v}")
+    print(f"товаров с историей цен: {len(hist)}")
     if waiting:
         print("\nЖдут решения (первые 15):")
         print("\n".join(waiting[:15]))
-    print(f"\nОпубликовано: {st['опубликовано']}")
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if "--smoke" in argv:
+        return smoke()
+    dry, cfg, now = is_dry(), get_cfg(), time.time()
+    if not dry and not (os.environ.get("TG_BOT_TOKEN") and os.environ.get("TG_CHAT_ID")):
+        print("[ERROR] не заданы TG_BOT_TOKEN / TG_CHAT_ID (GitHub Secrets)")
+        return 2
+    print(f"Режим: {'DRY RUN (без отправки и сохранения)' if dry else 'боевой'}")
+
+    state, hist = load_state(), _load(DATA / HIST_F, {})
+    hist = prune_history(hist, now, cfg["hist_days"])
+    srcs = S.active_sources()
+    print(f"Активных источников: {len(srcs)}")
+    results = S.fetch_all(srcs, {} if dry else state["sources"])
+
+    deals = []
+    for r in results:
+        st = state["sources"].setdefault(r.source.id, {})
+        if r.error:
+            st["errors"] = st.get("errors", 0) + 1
+        else:
+            st.update(errors=0, last_ok=now)
+            if r.etag:
+                st["etag"] = r.etag
+            if r.last_modified:
+                st["last_modified"] = r.last_modified
+        for e in r.entries:
+            deals.append(make_deal(e, r.source, now))
+    if results and all(r.error for r in results):
+        print_report(results, {}, Counter(), [], hist)
+        print("[ERROR] все источники недоступны")
+        return 1
+
+    # дубли одной и той же записи из разных лент/запросов одного источника
+    uniq = {}
+    for d in deals:
+        uniq.setdefault((d["id"], d["price"]), d)
+    deals = list(uniq.values())
+
+    ss = (lambda s: None) if dry else (lambda s: (trim_state(s, now, cfg), atomic_write_json(DATA / STATE_F, s)))
+    sh = (lambda h: None) if dry else (lambda h: atomic_write_json(DATA / HIST_F, h))
+    stats, per_src, waiting, fatal = Counter(), {}, [], False
+    try:
+        stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh)
+    finally:
+        ss(state)
+        sh(hist)
+    print_report(results, per_src, stats, waiting, hist)
+    return 1 if fatal else 0
+
+
+def smoke():
+    """Проверка всех источников (включая отключённые): статус, тип, число записей, свежесть."""
+    print("===== SMOKE TEST ИСТОЧНИКОВ (состояние и Telegram не затрагиваются) =====")
+    print("Время теста (UTC):", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+    for s in S.SOURCES:
+        if s.type == "reddit":
+            try:
+                creds = S.reddit_credentials()
+            except S.ConfigError as ex:
+                print(f"[{s.id}] КОНФИГ: {ex}")
+                continue
+            if creds is None:
+                print(f"[{s.id}] пропущен: Reddit не настроен")
+                continue
+        r = S.fetch_one(s)
+        newest = max((e["published_ts"] for e in r.entries if e["published_ts"]), default=None)
+        age = f"{(time.time() - newest) / 3600:.1f} ч назад" if newest else "нет дат"
+        flag = "OK " if (r.status == 200 and r.entries and not r.error) else "FAIL"
+        print(f"{flag} [{s.id}] enabled={s.enabled} HTTP {r.status} | {r.content_type[:40]} | записей {len(r.entries)}"
+              f" | свежайшая {age} | {r.seconds:.1f} с" + (f" | {redact(r.error)}" if r.error else ""))
+        for e in r.entries[:2]:
+            print("      ·", e["title"][:100])
+    return 0
 
 
 if __name__ == "__main__":
