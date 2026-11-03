@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """r/buildapcsales -> Telegram deals bot (runs from GitHub Actions)."""
 import html, json, os, re, sys, time
+from collections import Counter
+from urllib.parse import quote_plus
 from pathlib import Path
 import requests
 import feedparser
@@ -141,17 +143,25 @@ def evaluate(d, samples):
         ref, kind = max(prices), "history"
 
     new_low = confirmed and price < min(prices) * 0.98
-    info = {"ref": ref, "kind": kind, "pct": 0, "sav": 0, "new_low": new_low, "inflated": kind == "capped"}
+    info = {"ref": ref, "kind": kind, "pct": 0, "sav": 0, "new_low": new_low, "inflated": kind == "capped", "reason": ""}
 
     if d["cat"] == "combo":
-        return d["score"] >= MIN_SCORE * 2, info
+        need = MIN_SCORE * 2
+        info["reason"] = f"комбо: рейтинг {d['score']}/{need}"
+        return d["score"] >= need, info
     if ref is None or ref <= price:
-        return (d["score"] >= MIN_SCORE * 3) or new_low, info
+        need = MIN_SCORE * 3
+        info["reason"] = f"нет старой цены, рейтинг {d['score']}/{need}, замеров в истории {len(prices)}"
+        return (d["score"] >= need) or new_low, info
 
     info["pct"] = (ref - price) / ref * 100
     info["sav"] = ref - price
     min_pct, min_sav = RULES.get(d["cat"], DEFAULT_RULE)
     passes = info["pct"] >= min_pct and info["sav"] >= min_sav
+    if not passes:
+        info["reason"] = f"скидка {info['pct']:.0f}% / ${info['sav']:.0f} ниже порога {min_pct}% / ${min_sav}"
+    elif not (confirmed or d["score"] >= MIN_SCORE):
+        info["reason"] = f"ждёт подтверждения: рейтинг {d['score']}/{MIN_SCORE}"
     return passes and (confirmed or d["score"] >= MIN_SCORE), info
 
 
@@ -172,10 +182,13 @@ def build_message(d, info):
         lines.append("🔥 Новый минимум по нашей истории цен")
     if info["inflated"]:
         lines.append("ℹ️ Заявленная «старая» цена завышена, скидка пересчитана")
-    if d["score"]:
+    if d["score"] and d.get("source") in (None, "Reddit"):
         lines.append(f"👍 Рейтинг на Reddit: {d['score']}")
-    lines += ["", f"👉 <a href=\"{html.escape(d['url'], quote=True)}\">СМОТРЕТЬ В МАГАЗИНЕ</a>",
-              f"💬 <a href=\"{html.escape(d['discuss'], quote=True)}\">Обсуждение</a>"]
+    if d.get("source"):
+        lines.append(f"🔎 Источник: {html.escape(d['source'])}")
+    lines += ["", f"👉 <a href=\"{html.escape(d['url'], quote=True)}\">СМОТРЕТЬ В МАГАЗИНЕ</a>"]
+    if d["discuss"] and d["discuss"] != d["url"]:
+        lines.append(f"💬 <a href=\"{html.escape(d['discuss'], quote=True)}\">Обсуждение</a>")
     link = os.environ.get("CHANNEL_LINK", "")
     if link:
         lines += ["", "———————————————", f"📢 Ссылка для друзей: {html.escape(link)}"]
@@ -198,10 +211,17 @@ def tg_send(text):
 
 BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 # (имя, url, "оценка сообщества", которую присваиваем сделкам из этой ленты)
+SD = "https://slickdeals.net/newsearch.php"
+SEARCH_TERMS = ["ssd", "nvme", "rtx", "radeon", "ryzen", "ddr5", "graphics card", "motherboard", "monitor"]
 FEEDS = [
-    ("slickdeals-frontpage", "https://slickdeals.net/newsearch.php?mode=frontpage&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
-    ("slickdeals-popular", "https://slickdeals.net/newsearch.php?mode=popdeals&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
-    ("slickdeals-hot", "https://slickdeals.net/newsearch.php?searchin=first&forumchoice%5B%5D=9&rss=1", MIN_SCORE),
+    # (имя, url, оценка, присваиваемая записям; «отобрано сообществом/редакцией» = высокая)
+    ("Slickdeals frontpage", SD + "?mode=frontpage&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
+    ("Slickdeals popular", SD + "?mode=popdeals&searcharea=deals&searchin=first&rss=1", MIN_SCORE * 4),
+    ("Slickdeals hot", SD + "?searchin=first&forumchoice%5B%5D=9&rss=1", MIN_SCORE),
+    ("DealNews Computers", "https://www.dealnews.com/c39/Computers/?rss=1", MIN_SCORE * 4),
+] + [
+    (f"Slickdeals: {t}", SD + "?rss=1&q=" + quote_plus(t) + "&searcharea=deals&searchin=first&isUserSearch=1", MIN_SCORE)
+    for t in SEARCH_TERMS
 ]
 
 
@@ -214,7 +234,7 @@ def fetch_feed(name, url, score):
         link = e.get("link", "")
         out.append({"id": e.get("id") or link, "title": e.get("title", ""), "url": link,
                     "discuss_url": link, "score": score, "created_utc": ts,
-                    "link_flair_text": ""})
+                    "link_flair_text": "", "source": name})
     return out
 
 
@@ -226,8 +246,10 @@ def fetch_all():
             ok += 1
             print(f"[{name}] получено записей: {len(got)}")
             posts += got
+            time.sleep(1)
         except Exception as ex:
             print(f"[{name}] ОШИБКА: {ex}")
+            time.sleep(1)
     if os.environ.get("REDDIT_CLIENT_ID"):
         try:
             got = fetch_reddit()
@@ -266,28 +288,63 @@ def main():
     dry = os.environ.get("DRY_RUN") == "1"
     now = time.time()
     seen, hist = load(SEEN_F, {}), load(HIST_F, {})
-    posted = 0
+    st = Counter()
+    waiting = []
 
-    for post in sorted(fetch_all(), key=lambda p: p["created_utc"]):
+    posts = fetch_all()
+    # одна и та же сделка может прийти из нескольких лент: убираем дубли по id
+    uniq = {}
+    for p in posts:
+        uniq.setdefault(p["id"], p)
+    st["всего записей"] = len(posts)
+    st["уникальных"] = len(uniq)
+
+    for post in sorted(uniq.values(), key=lambda p: p["created_utc"]):
         pid = post["id"]
         if pid in seen:
+            st["уже обработаны ранее"] += 1
             continue
         d = parse(post)
-        if d is None or d["cat"] == "other" or "expired" in d["flair"]:
+        if d is None:
+            st["без цены в заголовке"] += 1
             seen[pid] = now
             continue
+        if d["cat"] == "other":
+            st["не комплектующие"] += 1
+            seen[pid] = now
+            continue
+        if "expired" in d["flair"]:
+            st["expired"] += 1
+            seen[pid] = now
+            continue
+        d["source"] = post.get("source", "Reddit")
+        st["железо, оценено"] += 1
+
+        dup_key = f"k:{d['key']}|{d['price']}"
+        if dup_key in seen and now - seen[dup_key] < 86400:
+            st["дубль (тот же товар и цена за 24ч)"] += 1
+            seen[pid] = now
+            continue
+
         samples = hist.setdefault(d["key"], [])
         ok, info = evaluate(d, samples)
         if not any(s[2] == pid for s in samples):
             samples.append([now, d["price"], pid])
 
-        if ok and posted < MAX_POSTS:
+        if ok and st["опубликовано"] < MAX_POSTS:
             msg = build_message(d, info)
             print(msg, "\n" + "=" * 40) if dry else tg_send(msg)
             seen[pid] = now
-            posted += 1
-        elif not ok and now - d["created"] > GIVE_UP_AFTER:
+            seen[dup_key] = now
+            st["опубликовано"] += 1
+        elif ok:
+            st["отложено (лимит за запуск)"] += 1
+        elif now - d["created"] > GIVE_UP_AFTER:
             seen[pid] = now
+            st["отброшено по возрасту"] += 1
+        else:
+            st["ждут"] += 1
+            waiting.append(f"  • [{d['cat']}] {d['name'][:60]} — ${d['price']:g} ({d['source']}): {info['reason']}")
 
     cutoff = now - HIST_DAYS * 86400
     hist = {k: [s for s in v if s[0] > cutoff] for k, v in hist.items()}
@@ -296,7 +353,18 @@ def main():
     if not dry:
         SEEN_F.write_text(json.dumps(seen))
         HIST_F.write_text(json.dumps(hist))
-    print(f"Опубликовано: {posted}")
+
+    print("\n===== ИТОГ ЗАПУСКА =====")
+    for k in ["всего записей", "уникальных", "уже обработаны ранее", "без цены в заголовке",
+              "не комплектующие", "expired", "железо, оценено", "дубль (тот же товар и цена за 24ч)",
+              "ждут", "отброшено по возрасту", "отложено (лимит за запуск)", "опубликовано"]:
+        if st[k] or k in ("всего записей", "опубликовано"):
+            print(f"{k}: {st[k]}")
+    print(f"товаров в истории цен: {len(hist)}")
+    if waiting:
+        print("\nЖдут решения (первые 15):")
+        print("\n".join(waiting[:15]))
+    print(f"\nОпубликовано: {st['опубликовано']}")
 
 
 if __name__ == "__main__":
