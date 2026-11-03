@@ -8,6 +8,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 import store_links
+import product_images
 
 
 class Node:
@@ -73,7 +74,7 @@ def money(value):
     return amount if math.isfinite(amount) and 0 < amount < 100000 else None
 
 
-def entry(name, url, price, original=None, currency="USD", availability="", base=""):
+def entry(name, url, price, original=None, currency="USD", availability="", base="", image=None):
     url = store_links.merchant_url(urljoin(base, url or ""))
     price = money(price)
     original = money(original)
@@ -91,7 +92,8 @@ def entry(name, url, price, original=None, currency="USD", availability="", base
             "title": title, "url": url, "discuss_url": "", "summary": "",
             "published_ts": None, "expired": False, "community_score": None, "flair": "",
             "store_price": price, "store_original": original if original and original > price else None,
-            "store_currency": "USD", "store_candidates": [url]}
+            "store_currency": "USD", "store_candidates": [url],
+            "image_url": product_images.image_url(image, base)}
 
 
 def walk_products(obj):
@@ -125,7 +127,7 @@ def jsonld_entries(doc, base):
                 e = entry(product.get("name"), product.get("url") or offer.get("url") or
                           (base if "/p/" in base or "/product/" in base else ""),
                           offer.get("price"), currency=offer.get("priceCurrency"),
-                          availability=offer.get("availability", ""), base=base)
+                          availability=offer.get("availability", ""), base=base, image=product.get("image"))
                 if e:
                     out.append(e)
     return out
@@ -159,6 +161,7 @@ def corsair_catalog(doc, base, schema_entries):
                       regular.get("value") if regular.get("currency") == "USD" else None,
                       currency=final.get("currency"), base=base) if url else None
             if e:
+                e["image_url"] = next((s.get("image_url") for s in schema_entries if s["url"] == url), None)
                 out.append(e)
         return out
     return None
@@ -180,7 +183,8 @@ def retail_cards(doc, base):
                     original = value
                 elif current is None:
                     current = value
-            e = entry(title, "https://www.amazon.com/dp/" + asin, current, original, base=base)
+            e = entry(title, "https://www.amazon.com/dp/" + asin, current, original, base=base,
+                      image=first(card.find("img", cls="s-image")).attrs.get("src"))
             if e:
                 out.append(e)
     elif host.endswith("newegg.com"):
@@ -192,7 +196,8 @@ def retail_cards(doc, base):
             original = first(card.find(cls="price-was-data")).text
             if re.search(r"out of stock|sold out", card.text, re.I):
                 continue
-            e = entry(link.text, link.attrs.get("href"), amount, original, base=base)
+            e = entry(link.text, link.attrs.get("href"), amount, original, base=base,
+                      image=first(card.find("img")).attrs.get("src"))
             if e:
                 out.append(e)
     else:
@@ -203,7 +208,8 @@ def retail_cards(doc, base):
             original = first(card.find(data_price_type="oldPrice")).attrs.get("data-price-amount")
             if re.search(r"out of stock|sold out", card.text, re.I):
                 continue
-            e = entry(link.text, link.attrs.get("href"), current, original, base=base)
+            e = entry(link.text, link.attrs.get("href"), current, original, base=base,
+                      image=first(card.find("img", cls="product-image-photo")).attrs.get("src"))
             if e:
                 out.append(e)
     return out

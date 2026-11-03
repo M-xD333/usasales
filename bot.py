@@ -15,6 +15,7 @@ import requests
 
 import sources as S
 import store_links
+import product_images
 
 DATA = Path(__file__).parent / "data"
 STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
@@ -301,6 +302,7 @@ def make_deal(entry, source, now):
         "store": source.name if source.type == "store" else detect_store(rest),
         "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
         "store_candidates": entry.get("store_candidates", []),
+        "image_url": product_images.image_url(entry.get("image_url")),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
         "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
     }
@@ -461,12 +463,26 @@ def redact(text):
     return str(text).replace(tok, "***") if tok else str(text)
 
 
-def tg_send(text, session=requests, sleep=time.sleep, store_url=None):
+def photo_caption(text):
+    plain = html.unescape(re.sub(r"<[^>]*>", "", text))
+    if len(plain.encode("utf-16-le")) <= 1024 * 2:
+        return {"caption": text, "parse_mode": "HTML"}
+    # Rare long captions: preserve essential leading information without cutting HTML tags.
+    caption = plain.encode("utf-16-le")[:1023 * 2].decode("utf-16-le", errors="ignore") + "…"
+    return {"caption": caption}
+
+
+def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=None):
     """Отправка с retry. Остаточный риск: если ответ потерян после доставки (read timeout),
     сообщение помечается ambiguous и НЕ отправляется повторно (лучше пропуск, чем дубль)."""
     token, chat = os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"]
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": False}
+    photo = product_images.image_url(photo_url)
+    method = "sendPhoto" if photo else "sendMessage"
+    url = f"https://api.telegram.org/bot{token}/{method}"
+    if photo:
+        payload = {"chat_id": chat, "photo": photo, **photo_caption(text)}
+    else:
+        payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": False}
     if store_url:
         direct = store_links.merchant_url(store_url)
         if not direct:
@@ -500,6 +516,11 @@ def tg_send(text, session=requests, sleep=time.sleep, store_url=None):
             last = f"HTTP {r.status_code}"
             sleep(2 ** attempt)
             continue
+        if photo and r.status_code == 400 and re.search(
+                r"photo|image|file|http url|web page content|caption is too long", desc, re.I):
+            # Explicit rejection means no photo was delivered; one text fallback is safe.
+            print("[WARN] Telegram не принял фото; отправляю текст с кнопкой магазина")
+            return tg_send(text, session=session, sleep=sleep, store_url=store_url)
         fatal = r.status_code in (401, 403, 404) or "chat not found" in desc.lower()
         raise TelegramError(f"Telegram HTTP {r.status_code}: {desc}", fatal=fatal, permanent=True)
     raise TelegramError(f"Telegram недоступен после повторов: {last}")
@@ -553,7 +574,8 @@ def prune_history(hist, now, days):
 
 
 # ============================== основной цикл ==============================
-def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print):
+def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
+            image_resolver=None):
     """Обработка сделок. Возвращает (stats, per_source, waiting, fatal)."""
     stats, per_src, waiting, fatal = Counter(), defaultdict(Counter), [], False
     save_state = save_state or (lambda s: None)
@@ -641,13 +663,18 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             continue
         d["url"] = direct
 
+        photo = product_images.image_url(d.get("image_url"))
+        if not photo and image_resolver and time.monotonic() < link_deadline:
+            photo = image_resolver(direct)
+        d["image_url"] = photo
+
         msg = build_message(d, info)
         if dry:
-            log(msg + "\nВ магазин: " + direct + "\n" + "=" * 40)
+            log(msg + "\nВ магазин: " + direct + ("\nФото: " + photo if photo else "") + "\n" + "=" * 40)
             stats["опубликовано"] += 1
             continue
         try:
-            send(msg, store_url=direct)
+            send(msg, store_url=direct, photo_url=photo)
         except TelegramError as ex:
             if ex.ambiguous:      # возможно доставлено: помечаем, чтобы не плодить дубли
                 log(f"[WARN] {ex}; помечаю как отправленное (риск пропуска вместо дубля)")
@@ -750,7 +777,8 @@ def main(argv=None):
     sh = (lambda h: None) if dry else (lambda h: atomic_write_json(DATA / HIST_F, h))
     stats, per_src, waiting, fatal = Counter(), {}, [], False
     try:
-        stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh)
+        stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
+                                               image_resolver=product_images.from_product_page)
     finally:
         ss(state)
         sh(hist)

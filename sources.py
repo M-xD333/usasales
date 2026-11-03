@@ -11,6 +11,7 @@ import feedparser
 import requests
 import store_links
 import direct_stores
+import product_images
 
 BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -147,6 +148,7 @@ def normalize_entry(e):
     summary = re.sub(r"\s+", " ", summary).strip()[:600]
     return {"item_id": e.get("id") or link or title, "url": link, "discuss_url": link,
             "store_candidates": candidates,
+            "image_url": product_images.from_feed(e, markup, link),
             "title": title, "summary": summary, "published_ts": entry_timestamp(e),
             "expired": bool(EXPIRED_RX.search(title)), "community_score": None, "flair": ""}
 
@@ -240,6 +242,7 @@ def fetch_reddit(source, env=None, session=requests):
                 p = c["data"]
                 res.entries.append({
                     "item_id": "reddit:" + p["id"], "url": p.get("url") or "",
+                    "image_url": product_images.image_url(p.get("thumbnail")),
                     "discuss_url": "https://www.reddit.com" + p.get("permalink", ""),
                     "title": p.get("title", ""), "summary": "", "published_ts": p.get("created_utc"),
                     "expired": "expired" in (p.get("link_flair_text") or "").lower(),
