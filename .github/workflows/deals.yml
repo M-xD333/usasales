@@ -1,23 +1,46 @@
 name: deals-bot
+
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "2-59/5 * * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "run = обычный запуск, smoke = проверить все источники (без публикации)"
+        type: choice
+        options: [run, smoke]
+        default: run
+      dry_run:
+        description: "Тестовый запуск без отправки сообщений и без сохранения состояния"
+        type: boolean
+        default: true
+
 concurrency:
   group: deals-bot
   cancel-in-progress: false
+
 permissions:
   contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+
       - name: Run bot
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -25,10 +48,34 @@ jobs:
           CHANNEL_LINK: ${{ secrets.CHANNEL_LINK }}
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
-        run: python bot.py
+          # Необязательные настройки: Settings -> Secrets and variables -> Actions -> Variables
+          ENABLE_SOURCES: ${{ vars.ENABLE_SOURCES }}
+          DISABLE_SOURCES: ${{ vars.DISABLE_SOURCES }}
+          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN }}
+          MAX_DEAL_AGE_HOURS: ${{ vars.MAX_DEAL_AGE_HOURS }}
+          MIN_SCORE: ${{ vars.MIN_SCORE }}
+          # по расписанию всегда публикуем; ручной запуск по умолчанию тестовый
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          PYTHONUNBUFFERED: "1"
+        run: python bot.py ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke') && '--smoke' || '' }}
+
       - name: Save state
+        if: always() && !(github.event_name == 'workflow_dispatch' && (inputs.mode == 'smoke' || inputs.dry_run))
         run: |
+          if [ ! -d data ]; then
+            echo "No data directory; nothing to persist."
+            exit 0
+          fi
           git config user.name "deals-bot"
           git config user.email "deals-bot@users.noreply.github.com"
-          git add data
-          git diff --cached --quiet || (git commit -m "state" && git push)
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No state changes."
+            exit 0
+          fi
+          git commit -m "chore: persist deals-bot state"
+          if ! git push; then
+            echo "Push rejected, rebasing and retrying once"
+            git pull --rebase origin "$GITHUB_REF_NAME"
+            git push
+          fi
