@@ -14,6 +14,8 @@ MERCHANTS = (
     "adorama.com", "antonline.com", "staples.com", "officedepot.com", "dell.com",
     "lenovo.com", "hp.com", "samsung.com", "lg.com", "asus.com", "acer.com",
     "westerndigital.com", "crucial.com", "corsair.com", "logitech.com", "monoprice.com",
+    "msi.com", "store.google.com", "kingston.com", "sandisk.com", "steelseries.com",
+    "razer.com", "hyperx.com", "elgato.com", "audio-technica.com", "shure.com",
 )
 AGGREGATORS = ("slickdeals.net", "techbargains.com", "bensbargains.net", "9to5toys.com",
                "pcworld.com", "tomshardware.com", "dealnews.com", "reddit.com")

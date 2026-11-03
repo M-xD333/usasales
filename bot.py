@@ -26,7 +26,8 @@ RULES = {
     "hdd": (25, 25), "ext_storage": (25, 20), "nas": (15, 40), "monitor": (25, 50),
     "psu": (25, 20), "case": (25, 20), "cooler": (25, 15), "prebuilt": (15, 100),
     "laptop": (15, 100), "minipc": (15, 50), "keyboard": (30, 15), "mouse": (30, 15),
-    "headset": (30, 15), "controller": (30, 15), "webcam": (30, 15), "networking": (25, 20),
+    "headset": (30, 15), "microphone": (25, 20), "pixel": (15, 50),
+    "controller": (30, 15), "webcam": (30, 15), "networking": (25, 20),
     "dock": (25, 15), "capture": (25, 25), "printer": (25, 30), "combo": (0, 0),
 }
 DEFAULT_RULE = (30, 20)
@@ -175,6 +176,8 @@ TAG_MAP = {"gpu": "gpu", "cpu": "cpu", "motherboard": "mobo", "mobo": "mobo", "r
            "networking": "networking", "router": "networking", "fans": "cooler"}
 # порядок важен: специфичное раньше общего (ноутбук с RTX — это laptop, а не gpu)
 CLASSIFY = [
+    # Only Pixel phones; exclude their cases, watches, earbuds, chargers and accessories.
+    ("pixel", r"^(?!.*\b(?:case|cover|protector|charger|cable|watch|buds|screen replacement)\b).*?\b(?:google\s+)?pixel\s+\d+(?:a|\s+pro)?\b"),
     ("laptop", r"\blaptop|notebook|chromebook|macbook|ultrabook"),
     ("minipc", r"mini[- ]pc|\bnuc\b|mini desktop"),
     ("prebuilt", r"gaming pc|gaming desktop|prebuilt|all-in-one pc|desktop pc|desktop computer"),
@@ -185,6 +188,7 @@ CLASSIFY = [
     ("capture", r"capture card"),
     ("dock", r"docking station|\bdock\b|usb[- ]?c? hub|\busb hub|thunderbolt dock|\badapter\b"),
     ("webcam", r"webcam"),
+    ("cooler", r"cpu cooler|liquid cpu cooler|liquid cooler|\baio\b|case fans?|cooling fan|\bradiator\b|hydro x"),
     ("gpu", r"\brtx\b|geforce|radeon|\brx ?\d{4}|arc [ab]\d{3}|graphics card|video card|\bgpu\b"),
     ("cpu", r"ryzen|core (?:ultra|i[3579])|threadripper|\bcpu\b|(?<!food )processor"),
     ("mobo", r"motherboard"),
@@ -196,7 +200,8 @@ CLASSIFY = [
     ("cooler", r"cpu cooler|\baio\b|liquid cooler|case fans?"),
     ("case", r"pc case|computer case|mid tower|full tower"),
     ("keyboard", r"keyboard"), ("mouse", r"\bmouse\b|\bmice\b"),
-    ("headset", r"headset|headphones"), ("controller", r"gamepad|controller"),
+    ("microphone", r"microphone|\bmic\b|wave[: ]?[13]|quadcast|seiren"),
+    ("headset", r"headset|headphones|earbuds|airpods"), ("controller", r"gamepad|controller"),
     ("printer", r"printer"),
 ]
 CLASSIFY_RX = [(c, re.compile(rx, re.I)) for c, rx in CLASSIFY]
@@ -265,11 +270,24 @@ def make_deal(entry, source, now):
     if tag.lower() not in TAG_MAP:       # «[Micro Center]», «[Open-Box YMMV]» и т.п. — не категория
         tag, rest = "", title
     pi = parse_prices(rest)
+    if source.type == "store":
+        # Structured catalog prices, independent of punctuation/numbers in product names.
+        price = direct_price = entry.get("store_price")
+        if (entry.get("store_currency") == "USD" and isinstance(price, (int, float))
+                and 0 < price < 100000):
+            pi.update(price=direct_price, issue=None, original=entry.get("store_original"),
+                      original_kind="MSRP" if entry.get("store_original") else None)
+        else:
+            pi.update(price=None, issue="invalid_store_price", original=None)
     cat = classify(rest, tag or entry.get("flair", ""))
     name = extract_name(rest, pi.get("first_price_pos"))
     asin_m = ASIN_RX.search(entry["url"] or "") or ASIN_RX.search(entry.get("summary", ""))
     asin = asin_m.group(1) if asin_m else None
     cond = detect_condition(title)
+    if cat == "pixel" and re.search(
+            r"trade[ -]?in|bill credits?|/mo\b|per month|activation|new line|port[ -]?in|with .{0,30}plan",
+            title + " " + entry.get("summary", ""), re.I):
+        pi["flags"].add("conditional_phone_price")
     ts = entry.get("published_ts")
     undated = ts is None
     if undated and source.allow_undated:
@@ -279,7 +297,8 @@ def make_deal(entry, source, now):
         "publish": source.publish, "title": title, "tag": tag, "name": name, "cat": cat,
         "price": pi["price"], "issue": pi["issue"], "original": pi["original"],
         "original_kind": pi["original_kind"], "price_kind": pi["price_kind"], "code": pi["code"],
-        "flags": sorted(pi["flags"]), "cond": cond, "store": detect_store(rest),
+        "flags": sorted(pi["flags"]), "cond": cond,
+        "store": source.name if source.type == "store" else detect_store(rest),
         "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
         "store_candidates": entry.get("store_candidates", []),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
@@ -288,6 +307,9 @@ def make_deal(entry, source, now):
 
 
 def hist_key(d):
+    if d["trust"] == "merchant":
+        # Compare a store's exact SKU/variant against its own observed prices.
+        return f"store:{d['url']}|{d['cond']}"
     return f"{d['ident']}|{d['cond']}"
 
 
@@ -305,7 +327,9 @@ def hist_stats(samples, now, hist_days, exclude_pid=None):
 
 
 def add_sample(samples, d, now):
-    pid = d["id"]
+    # A store SKU keeps the same item ID for years; separate spaced observations.
+    pid = (f"{d['id']}@observation:{int(now // (12 * 3600))}"
+           if d["trust"] == "merchant" else d["id"])
     if any(s[2] == pid and s[1] == d["price"] for s in samples):
         return
     if any(s[1] == d["price"] and now - s[0] < 12 * 3600 for s in samples):  # та же цена из другой ленты
@@ -324,6 +348,8 @@ def assess(d, stats, cfg, now):
 
     if not d["publish"]:
         return no("источник только для наблюдений", True)
+    if d["cat"] == "pixel" and "conditional_phone_price" in d["flags"]:
+        return no("цена Pixel зависит от trade-in, тарифа или рассрочки", True)
     if d["price"] is None:
         return no(f"цена не определена ({d['issue']})", True)
     if d["cat"] in ("other", "review"):
@@ -540,7 +566,8 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         if (d["id"], d["price"]) not in known:
             deals.append(d)
 
-    deals.sort(key=lambda d: d["published_ts"] or 0, reverse=True)   # сначала новые
+    # Components, peripherals and Pixel first; laptops/prebuilts use the remaining slots.
+    deals.sort(key=lambda d: (d["cat"] in ("laptop", "prebuilt"), -(d["published_ts"] or 0)))
     transient_fails = 0
     link_deadline = time.monotonic() + 60
 
@@ -548,6 +575,8 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         sid = d["source_id"]
         pkey = f"{d['id']}@{d['price']}"           # смена цены у той же записи = новая оценка
         if pkey in state["processed"]:
+            if d["trust"] == "merchant" and d["price"] is not None and d["cat"] not in ("other", "review"):
+                add_sample(hist.setdefault(hist_key(d), []), d, now)
             stats["уже обработаны"] += 1
             continue
         if d["cat"] == "review":
@@ -568,7 +597,8 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             continue
 
         samples = hist.setdefault(hist_key(d), [])
-        stats_h = hist_stats(samples, now, cfg["hist_days"], exclude_pid=d["id"])
+        stats_h = hist_stats(samples, now, cfg["hist_days"],
+                             exclude_pid=None if d["trust"] == "merchant" else d["id"])
         ok, info = assess(d, stats_h, cfg, now)
         add_sample(samples, d, now)
         per_src[sid]["оценено"] += 1
@@ -690,6 +720,11 @@ def main(argv=None):
     deals = []
     for r in results:
         st = state["sources"].setdefault(r.source.id, {})
+        if r.source.type == "store" and r.not_modified:
+            # Preserve the previous error/backoff state during the cache interval.
+            continue
+        if r.source.type == "store" and not r.not_modified:
+            st["last_attempt"] = now
         if r.error:
             st["errors"] = st.get("errors", 0) + 1
         else:

@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 import feedparser
 import requests
 import store_links
+import direct_stores
 
 BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -17,7 +18,8 @@ REDDIT_UA = "deals-bot/0.2 (personal project)"
 TIMEOUT = (5, 15)           # connect, read
 SD = "https://slickdeals.net/newsearch.php"
 SEARCH_TERMS = ["ssd", "nvme", "rtx", "radeon", "ryzen", "ddr5",
-                "graphics card", "motherboard", "monitor"]
+                "graphics card", "motherboard", "monitor", "google pixel",
+                "gaming mouse", "mechanical keyboard", "headset", "microphone"]
 
 
 class ConfigError(Exception):
@@ -29,7 +31,7 @@ class Source:
     id: str
     name: str
     url: str
-    type: str = "rss"              # rss | reddit
+    type: str = "rss"              # rss | reddit | store
     trust: str = "unvetted"        # curated | editorial | unvetted | community
     enabled: bool = True           # включён по умолчанию; остальные — через ENABLE_SOURCES
     publish: bool = True           # False = только наблюдение за ценами
@@ -65,6 +67,25 @@ SOURCES = [
            note="условия DealNews: не менять содержимое/ссылки, обязательная атрибуция. Включать только осознанно"),
     Source("reddit-buildapcsales", "Reddit r/buildapcsales", "reddit://buildapcsales", type="reddit", trust="community",
            note="нужны REDDIT_CLIENT_ID и REDDIT_CLIENT_SECRET (одобренный доступ)"),
+    # Direct catalogs are enabled independently of the optional aggregator list.
+    *[Source(sid, name, url, type="store", trust="merchant", allow_undated=True)
+      for sid, name, url in [
+          ("amazon-components", "Amazon Components", "https://www.amazon.com/s?k=computer+components"),
+          ("amazon-peripherals", "Amazon Peripherals", "https://www.amazon.com/s?k=gaming+keyboard+mouse+headset+microphone"),
+          ("amazon-pixel", "Amazon Google Pixel", "https://www.amazon.com/s?k=google+pixel+unlocked+phone"),
+          ("newegg-direct", "Newegg Direct", "https://www.newegg.com/todays-deals"),
+          ("corsair-memory", "Corsair Memory", "https://www.corsair.com/us/en/c/memory"),
+          ("corsair-psu", "Corsair Power Supplies", "https://www.corsair.com/us/en/c/psu"),
+          ("corsair-cooling", "Corsair Cooling", "https://www.corsair.com/us/en/c/cpu-coolers"),
+          ("corsair-keyboards", "Corsair Keyboards", "https://www.corsair.com/us/en/c/keyboards"),
+          ("corsair-mice", "Corsair Mice", "https://www.corsair.com/us/en/c/gaming-mouse"),
+          ("corsair-headsets", "Corsair Headsets", "https://www.corsair.com/us/en/c/gaming-headsets"),
+          ("msi-direct", "MSI Components", "https://us-store.msi.com/Components"),
+          ("samsung-storage", "Samsung Storage", "https://www.samsung.com/us/computing/memory-storage/all-memory-storage/"),
+          ("crucial-direct", "Crucial Memory & SSD", "https://www.crucial.com/promotions"),
+          ("asus-gpu", "ASUS Graphics Cards", "https://eshop.asus.com/us/products/graphics-cards.html"),
+          ("google-pixel-direct", "Google Store Pixel", "https://store.google.com/us/collection/offers?hl=en-US"),
+      ]],
 ]
 
 
@@ -231,7 +252,46 @@ def fetch_reddit(source, env=None, session=requests):
     return res
 
 
+def fetch_store(source, cond=None, session=requests):
+    res, t0 = FetchResult(source), time.monotonic()
+    state = cond or {}
+    interval = 1800 if state.get("errors", 0) else 900
+    if time.time() - state.get("last_attempt", 0) < interval:
+        res.status, res.not_modified = 304, True
+        return res
+    try:
+        headers = {"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"}
+        # US catalog only; never bypass CAPTCHA/access challenges.
+        r = session.get(source.url, headers=headers, timeout=(4, 10))
+        res.status, res.content_type = r.status_code, r.headers.get("Content-Type", "")
+        if r.status_code != 200:
+            res.error = f"прямой магазин: HTTP {r.status_code}"
+            return res
+        if re.search(r"<title[^>]*>[^<]*(?:captcha|robot check|just a moment)|verify you are human|/errors/validateCaptcha",
+                     r.text[:15000], re.I):
+            res.error = "магазин требует проверку браузера; данные не получены"
+            return res
+        res.entries = direct_stores.parse_catalog(r.text, r.url)
+        if not res.entries:
+            links = direct_stores.product_links(r.text, r.url)
+            for url in links:
+                if time.monotonic() - t0 > 20:
+                    break
+                p = session.get(url, headers=headers, timeout=(3, 5))
+                if p.status_code == 200:
+                    res.entries.extend(direct_stores.parse_catalog(p.text, p.url))
+            if not res.entries:
+                res.error = "нет однозначных USD-цен товаров: JS-каталог, блокировка или изменённая разметка"
+    except (requests.RequestException, ValueError, TypeError, KeyError, RecursionError) as ex:
+        res.error = f"{type(ex).__name__}: {ex}"
+    finally:
+        res.seconds = time.monotonic() - t0
+    return res
+
+
 def fetch_one(source, cond=None):
+    if source.type == "store":
+        return fetch_store(source, cond)
     return fetch_reddit(source) if source.type == "reddit" else fetch_rss(source, cond)
 
 
