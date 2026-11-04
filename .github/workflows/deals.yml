@@ -96,10 +96,23 @@ jobs:
 
           deadline=$(( $(date +%s) + LOOP_MINUTES * 60 ))
           i=0
+          failures=0
           while : ; do
             i=$(( i + 1 ))
             echo "::group::iteration $i — $(date -u '+%Y-%m-%d %H:%M:%S') UTC"
-            python bot.py $SMOKE_FLAG || echo "::warning::bot exit=$? — tsikl davom etadi"
+            # Fail immediately on corrupt code, including updates fetched mid-run.
+            python -m compileall -q -x '/\.git/' .
+            if timeout --signal=TERM --kill-after=30s 10m python bot.py $SMOKE_FLAG; then
+              failures=0
+            else
+              code=$?
+              failures=$(( failures + 1 ))
+              echo "::warning::bot exit=$code; consecutive failures=$failures/3"
+              if [ "$code" = 124 ] || [ "$code" = 137 ] || [ "$failures" -ge 3 ]; then
+                echo "::error::Bot stopped making progress; ending run to release the queue."
+                exit 1
+              fi
+            fi
             echo "::endgroup::"
 
             push_state

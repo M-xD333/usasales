@@ -24,7 +24,7 @@ class RunnerSyncTests(unittest.TestCase):
             git(self.editor, "config", name, value)
         (self.editor / "data").mkdir()
         (self.editor / "data/state.json").write_text('{"posted": {"first": 1}}')
-        (self.editor / "bot.py").write_text("old code\n")
+        (self.editor / "bot.py").write_text("# old code\n")
         git(self.editor, "add", ".")
         git(self.editor, "commit", "-m", "initial")
         git(self.editor, "push", "origin", "main")
@@ -33,7 +33,7 @@ class RunnerSyncTests(unittest.TestCase):
             git(self.runner, "config", name, value)
         self.sync = RunnerGit(self.runner, "main")
 
-    def edit_remote(self, name="bot.py", content="new code\n"):
+    def edit_remote(self, name="bot.py", content="# new code\n"):
         git(self.editor, "pull", "--ff-only")
         (self.editor / name).write_text(content)
         git(self.editor, "add", name)
@@ -48,10 +48,10 @@ class RunnerSyncTests(unittest.TestCase):
         (self.runner / "data/state.json").write_text(state)
         self.edit_remote()
         self.sync.push()
-        self.assertEqual(self.remote_file("bot.py"), "new code\n")
+        self.assertEqual(self.remote_file("bot.py"), "# new code\n")
         self.assertEqual(self.remote_file("data/state.json"), state)
         self.sync.sync()
-        self.assertEqual((self.runner / "bot.py").read_text(), "new code\n")
+        self.assertEqual((self.runner / "bot.py").read_text(), "# new code\n")
         self.assertEqual((self.runner / "data/state.json").read_text(), state)
         self.assertFalse((self.runner / ".git/rebase-merge").exists())
         head = git(self.remote, "rev-parse", "main").stdout
@@ -111,6 +111,17 @@ class RunnerSyncTests(unittest.TestCase):
                 self.sync.push()
         self.assertFalse((self.runner / ".git/rebase-merge").exists())
         self.assertIn('"new"', (self.runner / "data/state.json").read_text())
+
+    def test_broken_remote_code_does_not_replace_working_code_or_state(self):
+        before = git(self.runner, "rev-parse", "HEAD").stdout
+        checkpoint = '{"posted": {"latest": 4}}'
+        (self.runner / "data/state.json").write_text(checkpoint)
+        self.edit_remote("sources.py", 'url = "https://store.example/… tokens truncated…')
+        with self.assertRaises(SyntaxError):
+            self.sync.sync()
+        self.assertEqual(git(self.runner, "rev-parse", "HEAD").stdout, before)
+        self.assertEqual((self.runner / "bot.py").read_text(), "# old code\n")
+        self.assertEqual((self.runner / "data/state.json").read_text(), checkpoint)
 
 
 if __name__ == "__main__":

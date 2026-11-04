@@ -216,7 +216,7 @@ class TelegramTests(unittest.TestCase):
         msg = bot.build_message(d, bot.assess(d, Assessment.EMPTY, cfg(), NOW)[1])
         self.assertIn("&lt;b&gt;", msg)
         self.assertNotIn("Обсуждение", msg)
-        self.assertNotIn("href=", msg)
+        self.assertIn('href="https://www.newegg.com/p/N82E1681?b=1&amp;c=2"', msg)
         self.assertLessEqual(len(msg), 4096)
 
     def test_429_then_ok(self):

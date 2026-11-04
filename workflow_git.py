@@ -90,12 +90,21 @@ class RunnerGit:
         try:
             self.recover()
             head = self.fetch()
+            self.validate_code(head)
             # This reset is restricted by main() to an ephemeral Actions runner.
             self.git("reset", "--hard", head)
         finally:
             self.restore(files)
         shutil.rmtree(backup)
         print("Code synchronized; local data preserved.")
+
+    def validate_code(self, head):
+        """Reject a broken remote tree before replacing the working checkout."""
+        names = self.git("ls-tree", "-r", "--name-only", "-z", head).stdout.split("\0")
+        for name in names:
+            if name.endswith(".py"):
+                source = self.git("show", head + ":" + name).stdout
+                compile(source, name, "exec")
 
 
 def main():
