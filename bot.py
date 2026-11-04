@@ -16,6 +16,7 @@ import requests
 import sources as S
 import store_links
 import product_images
+import market_prices
 
 DATA = Path(__file__).parent / "data"
 STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
@@ -302,6 +303,8 @@ def make_deal(entry, source, now):
         "store": source.name if source.type == "store" else detect_store(rest),
         "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
         "store_candidates": entry.get("store_candidates", []),
+        "product_meta": entry.get("product_meta", {}) if source.type == "store" else {},
+        "price_origin": "store" if source.type == "store" else "feed",
         "image_url": product_images.image_url(entry.get("image_url")),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
         "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
@@ -339,7 +342,7 @@ def add_sample(samples, d, now):
     samples.append([now, d["price"], pid, d["source_id"]])
 
 
-def assess(d, stats, cfg, now):
+def assess(d, stats, cfg, now, market_evidence=None):
     """Решение о публикации. Возвращает (ok, info). info['reason'] — причина отказа/ожидания."""
     info = {"claimed": None, "pct": 0.0, "sav": 0.0, "claim_bad": False, "median_pct": None,
             "new_low_obs": False, "reason": "", "final": False}
@@ -365,6 +368,9 @@ def assess(d, stats, cfg, now):
         return no(f"старше {cfg['max_age_h']} ч", True)
 
     min_pct, min_sav = cfg["rules"].get(d["cat"], DEFAULT_RULE)
+    if market_evidence:
+        info["market"] = market_evidence
+        return True, info
     price, orig = d["price"], d["original"]
     n, med = stats["n"], stats["median"]
 
@@ -430,6 +436,11 @@ def build_message(d, info):
         label = "MSRP" if d["original_kind"] == "MSRP" else "было"
         price_line += f" ({label} {fmt_price(info['claimed'])}, −{info['pct']:.0f}%)"
     lines.append(price_line)
+    if info.get("market"):
+        m = info["market"]
+        refs = ", ".join(f'<a href="{e(q["url"], quote=True)}">{e(q["shop"])}</a>' for q in m["references"])
+        lines.append(f"📊 Другие магазины: от {fmt_price(m['baseline'])}; экономия с доставкой {fmt_price(m['saved'])} (−{m['pct']:.0f}%)")
+        lines.append("Проверены: " + refs)
     lines.append(f"⚠️ Условие: {d['cond']}")
     if d["store"]:
         lines.append(f"🏪 Магазин: {e(d['store'])}")
@@ -562,6 +573,9 @@ def load_state():
 
 
 def trim_state(st, now, cfg):
+    st["pending"] = dict(sorted(((k, d) for k, d in st["pending"].items()
+                                if d.get("published_ts") and now - d["published_ts"] <= cfg["max_age_h"] * 3600),
+                               key=lambda kv: kv[1].get("published_ts", 0))[-500:])
     st["posted"] = {k: v for k, v in st["posted"].items() if now - v < max(cfg["dup_hours"], 24) * 3600 * 2}
     st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
     st["review"] = st["review"][-100:]
@@ -575,7 +589,7 @@ def prune_history(hist, now, days):
 
 # ============================== основной цикл ==============================
 def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
-            image_resolver=None):
+            image_resolver=None, market=None):
     """Обработка сделок. Возвращает (stats, per_source, waiting, fatal)."""
     stats, per_src, waiting, fatal = Counter(), defaultdict(Counter), [], False
     save_state = save_state or (lambda s: None)
@@ -587,6 +601,9 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
     for d in pending.values():          # отложенные лимитом в прошлый запуск (новый запуск мог получить 304)
         if (d["id"], d["price"]) not in known:
             deals.append(d)
+    if market:
+        for d in deals:
+            market.add(d)
 
     # Components, peripherals and Pixel first; laptops/prebuilts use the remaining slots.
     deals.sort(key=lambda d: (d["cat"] in ("laptop", "prebuilt"), -(d["published_ts"] or 0)))
@@ -622,6 +639,13 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         stats_h = hist_stats(samples, now, cfg["hist_days"],
                              exclude_pid=None if d["trust"] == "merchant" else d["id"])
         ok, info = assess(d, stats_h, cfg, now)
+        if market and not ok and not info["final"]:
+            evidence, reason = market.compare(d, *cfg["rules"].get(d["cat"], DEFAULT_RULE))
+            if evidence:
+                ok, info = assess(d, stats_h, cfg, now, evidence)
+                d["url"] = evidence["candidate_url"]
+            else:
+                info["reason"] += "; сравнение магазинов: " + reason
         add_sample(samples, d, now)
         per_src[sid]["оценено"] += 1
 
@@ -638,6 +662,8 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
                 stats["отклонено окончательно"] += 1
                 per_src[sid][f"откл.: {info['reason']}"] += 1
             else:
+                if market and market_prices.identity(d):
+                    state["pending"][pkey] = d
                 stats["ждут"] += 1
                 per_src[sid]["ждут"] += 1
                 waiting.append(f"  • [{d['cat']}] {d['name'][:55]} — {fmt_price(d['price'])} ({d['source']}): {info['reason']}")
@@ -724,7 +750,7 @@ def print_report(results, per_src, stats, waiting, hist):
         print(f"{k}: {v}")
     print(f"товаров с историей цен: {len(hist)}")
     if waiting:
-        print("\nЖдут решения (первые 15):")
+        print("\nНе опубликованы — причины автоматической проверки (первые 15):")
         print("\n".join(waiting[:15]))
 
 
@@ -776,9 +802,17 @@ def main(argv=None):
     ss = (lambda s: None) if dry else (lambda s: (trim_state(s, now, cfg), atomic_write_json(DATA / STATE_F, s)))
     sh = (lambda h: None) if dry else (lambda h: atomic_write_json(DATA / HIST_F, h))
     stats, per_src, waiting, fatal = Counter(), {}, [], False
+    def verify_product(url):
+        entry = S.fetch_market_product(url)
+        if entry:
+            source = S.Source("market-check", market_prices.shop(url), url,
+                              type="store", trust="merchant", allow_undated=True)
+            return make_deal(entry, source, now)
+        return None
+    market = market_prices.MarketPrices(state, now, verifier=verify_product)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               image_resolver=product_images.from_product_page)
+                                               image_resolver=product_images.from_product_page, market=market)
     finally:
         ss(state)
         sh(hist)

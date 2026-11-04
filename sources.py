@@ -12,6 +12,7 @@ import requests
 import store_links
 import direct_stores
 import product_images
+import market_prices
 
 BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -244,61 +245,7 @@ def fetch_reddit(source, env=None, session=requests):
                     "item_id": "reddit:" + p["id"], "url": p.get("url") or "",
                     "image_url": product_images.image_url(p.get("thumbnail")),
                     "discuss_url": "https://www.reddit.com" + p.get("permalink", ""),
-                    "title": p.get("title", ""), "summary": "", "published_ts": p.get("created_utc"),
-                    "expired": "expired" in (p.get("link_flair_text") or "").lower(),
-                    "community_score": int(p.get("score") or 0), "flair": p.get("link_flair_text") or ""})
-    except ConfigError as ex:
-        res.error = str(ex)
-    except Exception as ex:
-        res.error = f"{type(ex).__name__}: {ex}"
-    res.seconds = time.time() - t0
-    return res
-
-
-def fetch_store(source, cond=None, session=requests):
-    res, t0 = FetchResult(source), time.monotonic()
-    state = cond or {}
-    interval = 1800 if state.get("errors", 0) else 900
-    if time.time() - state.get("last_attempt", 0) < interval:
-        res.status, res.not_modified = 304, True
-        return res
-    try:
-        headers = {"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"}
-        # US catalog only; never bypass CAPTCHA/access challenges.
-        r = session.get(source.url, headers=headers, timeout=(4, 10))
-        res.status, res.content_type = r.status_code, r.headers.get("Content-Type", "")
-        if r.status_code != 200:
-            res.error = f"прямой магазин: HTTP {r.status_code}"
-            return res
-        if re.search(r"<title[^>]*>[^<]*(?:captcha|robot check|just a moment)|verify you are human|/errors/validateCaptcha",
-                     r.text[:15000], re.I):
-            res.error = "магазин требует проверку браузера; данные не получены"
-            return res
-        res.entries = direct_stores.parse_catalog(r.text, r.url)
-        if not res.entries:
-            links = direct_stores.product_links(r.text, r.url)
-            for url in links:
-                if time.monotonic() - t0 > 20:
-                    break
-                p = session.get(url, headers=headers, timeout=(3, 5))
-                if p.status_code == 200:
-                    res.entries.extend(direct_stores.parse_catalog(p.text, p.url))
-            if not res.entries:
-                res.error = "нет однозначных USD-цен товаров: JS-каталог, блокировка или изменённая разметка"
-    except (requests.RequestException, ValueError, TypeError, KeyError, RecursionError) as ex:
-        res.error = f"{type(ex).__name__}: {ex}"
-    finally:
-        res.seconds = time.monotonic() - t0
-    return res
-
-
-def fetch_one(source, cond=None):
-    if source.type == "store":
-        return fetch_store(source, cond)
-    return fetch_reddit(source) if source.type == "reddit" else fetch_rss(source, cond)
-
-
-def fetch_all(sources, state_sources=None, workers=3, deadline=120):
+  …1082 tokens truncated…def fetch_all(sources, state_sources=None, workers=3, deadline=120):
     """Параллельная загрузка с ограничением числа потоков и общим дедлайном."""
     state_sources = state_sources or {}
     results = []

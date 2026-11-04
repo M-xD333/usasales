@@ -9,6 +9,7 @@ from urllib.parse import urljoin, urlsplit
 
 import store_links
 import product_images
+import market_prices
 
 
 class Node:
@@ -74,7 +75,7 @@ def money(value):
     return amount if math.isfinite(amount) and 0 < amount < 100000 else None
 
 
-def entry(name, url, price, original=None, currency="USD", availability="", base="", image=None):
+def entry(name, url, price, original=None, currency="USD", availability="", base="", image=None, meta=None):
     url = store_links.merchant_url(urljoin(base, url or ""))
     price = money(price)
     original = money(original)
@@ -93,7 +94,51 @@ def entry(name, url, price, original=None, currency="USD", availability="", base
             "published_ts": None, "expired": False, "community_score": None, "flair": "",
             "store_price": price, "store_original": original if original and original > price else None,
             "store_currency": "USD", "store_candidates": [url],
+            "product_meta": meta or {},
             "image_url": product_images.image_url(image, base)}
+
+
+def offer_meta(product, offer, base):
+    brand = product.get("brand", "")
+    if isinstance(brand, dict):
+        brand = brand.get("name", "")
+    seller = offer.get("seller", "")
+    if isinstance(seller, dict):
+        seller = seller.get("name", "")
+    condition = offer.get("itemCondition") or product.get("itemCondition", "")
+    condition = {"NewCondition": "New", "UsedCondition": "Used", "RefurbishedCondition": "Refurbished"}.get(
+        str(condition).rsplit("/", 1)[-1])
+    if not condition and market_prices.shop(base) in market_prices.FIRST_PARTY:
+        name = str(product.get("name", ""))
+        condition = "Refurbished" if re.search(r"refurb|renewed|open.box|\bused\b", name, re.I) else "New"
+    details = offer.get("shippingDetails", [])
+    details = details if isinstance(details, list) else [details]
+    rates = set()
+    for detail in details:
+        if not isinstance(detail, dict) or detail.get("doesNotShip"):
+            continue
+        destination = detail.get("shippingDestination", {})
+        rate = detail.get("shippingRate", {})
+        if (isinstance(destination, dict) and destination.get("addressCountry") == "US"
+                and not any(destination.get(k) for k in ("addressRegion", "postalCode", "postalCodeRange"))
+                and not any(detail.get(k) for k in ("eligibleTransactionVolume", "validForMemberTier"))
+                and isinstance(rate, dict)
+                and rate.get("currency") == "USD"):
+            value = rate.get("value")
+            try:
+                value = float(value)
+                if math.isfinite(value) and value >= 0:
+                    rates.add(value)
+            except (TypeError, ValueError):
+                pass
+    return {"brand": brand if isinstance(brand, str) else "", "mpn": product.get("mpn", ""),
+            "gtins": [str(product[k]) for k in ("gtin", "gtin8", "gtin12", "gtin13", "gtin14") if product.get(k)],
+            "currency": offer.get("priceCurrency"),
+            "market": "US" if not re.search(r"/(?:uk|gb|de|fr|ca|au|jp|en-gb|en-ca)(?:/|$)", urlsplit(base).path, re.I) else None,
+            "condition": condition,
+            "in_stock": str(offer.get("availability", "")).rsplit("/", 1)[-1] == "InStock",
+            "shipping": rates.pop() if len(rates) == 1 else None,
+            "seller": seller if isinstance(seller, str) else ""}
 
 
 def walk_products(obj):
@@ -127,7 +172,8 @@ def jsonld_entries(doc, base):
                 e = entry(product.get("name"), product.get("url") or offer.get("url") or
                           (base if "/p/" in base or "/product/" in base else ""),
                           offer.get("price"), currency=offer.get("priceCurrency"),
-                          availability=offer.get("availability", ""), base=base, image=product.get("image"))
+                          availability=offer.get("availability", ""), base=base, image=product.get("image"),
+                          meta=offer_meta(product, offer, base))
                 if e:
                     out.append(e)
     return out
@@ -162,6 +208,11 @@ def corsair_catalog(doc, base, schema_entries):
                       currency=final.get("currency"), base=base) if url else None
             if e:
                 e["image_url"] = next((s.get("image_url") for s in schema_entries if s["url"] == url), None)
+                e["product_meta"] = {"brand": "Corsair", "mpn": item.get("sku", ""),
+                                     "gtins": [], "currency": final.get("currency"),
+                                     "in_stock": True, "condition": "New", "market": "US",
+                                     "shipping": 0 if item.get("free_shipping") is True else None,
+                                     "seller": "Corsair"}
                 out.append(e)
         return out
     return None
