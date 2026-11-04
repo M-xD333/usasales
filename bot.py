@@ -17,6 +17,7 @@ import sources as S
 import store_links
 import product_images
 import market_prices
+import market_search
 
 DATA = Path(__file__).parent / "data"
 STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
@@ -808,7 +809,8 @@ def main(argv=None):
                               type="store", trust="merchant", allow_undated=True)
             return make_deal(entry, source, now)
         return None
-    market = market_prices.MarketPrices(state, now, verifier=verify_product)
+    market = market_prices.MarketPrices(state, now, verifier=verify_product,
+                                      discoverer=market_search.discover)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
                                                market=market)

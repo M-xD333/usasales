@@ -33,7 +33,7 @@ def canonical_url(url):
     p = urlsplit(url)
     query = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
              if not k.lower().startswith("utm_") and k.lower() not in
-             {"tag", "ref", "ref_", "affid", "affiliate", "clickid", "irgwc", "cm_sp", "cm_mmc"}]
+             {"tag", "ref", "ref_", "affid", "affiliate", "clickid", "irgwc", "cm_sp", "cm_mmc", "queryid", "position"}]
     return urlunsplit((p.scheme, p.netloc.lower(), p.path.rstrip("/"), urlencode(sorted(query)), ""))
 
 
@@ -70,6 +70,13 @@ def pixel_key(text):
     return "pixel:" + normalize(model.group()) + ":" + str(capacities.pop()) + ":" + normalize(colors[0]) + ":unlocked:us"
 
 
+def mpn_key(meta):
+    brand, mpn = normalize(meta.get("brand")), normalize(meta.get("mpn"))
+    if brand and len(mpn) >= 5 and re.search(r"[a-z]", mpn) and re.search(r"\d", mpn):
+        return "mpn:" + brand + ":" + mpn
+    return None
+
+
 def identity(deal):
     """No fuzzy title similarity. Pixel fallback requires the full retail variant."""
     meta = deal.get("product_meta") or {}
@@ -93,10 +100,19 @@ def identity(deal):
         gtin = valid_gtin(value)
         if gtin:
             return "gtin:" + gtin
-    brand, mpn = normalize(meta.get("brand")), normalize(meta.get("mpn"))
-    if brand and len(mpn) >= 5 and re.search(r"[a-z]", mpn) and re.search(r"\d", mpn):
-        return "mpn:" + brand + ":" + mpn
-    return None
+    return mpn_key(meta)
+
+
+def identity_keys(deal):
+    key = identity(deal)
+    if not key:
+        return set()
+    meta = deal.get("product_meta") or {}
+    keys = {key}
+    keys.update("gtin:" + g for x in meta.get("gtins", []) if (g := valid_gtin(x)))
+    if (mpn := mpn_key(meta)):
+        keys.add(mpn)
+    return keys
 
 
 def quote(deal, observed_at):
@@ -115,16 +131,20 @@ def quote(deal, observed_at):
     shipping = meta.get("shipping")
     if shipping is not None and (not number(shipping) or shipping < 0):
         return None
-    return {"key": key, "url": url, "shop": domain, "price": price,
+    return {"key": key, "keys": sorted(identity_keys(deal)),
+            "variant": pixel_key(deal["title"]) if deal.get("cat") == "pixel" else None,
+            "url": url, "shop": domain, "price": price,
             "shipping": shipping, "observed_at": observed_at, "title": deal["title"],
             "gtins": [g for x in meta.get("gtins", []) if (g := valid_gtin(x))],
             "mpn": normalize(meta.get("mpn")), "brand": normalize(meta.get("brand"))}
 
 
 class MarketPrices:
-    def __init__(self, state, now, verifier=None, max_requests=8, budget=45):
+    def __init__(self, state, now, verifier=None, max_requests=12, budget=60,
+                 discoverer=None, max_search_requests=4):
         self.now, self.verifier = now, verifier
         self.remaining, self.deadline = max_requests, time.monotonic() + budget
+        self.discoverer, self.search_remaining = discoverer, max_search_requests
         self.state = state.setdefault("market_prices", {"quotes": {}, "checked": {}})
         self.state["quotes"] = {u: q for u, q in self.state.get("quotes", {}).items()
                                 if number(q.get("observed_at")) and 0 <= now - q["observed_at"] <= TTL}
@@ -133,19 +153,22 @@ class MarketPrices:
         self.state["products"] = {u: p for u, p in self.state.get("products", {}).items()
                                   if number(p.get("seen_at")) and 0 <= now - p["seen_at"] < 30 * 86400}
         self.seeds = {}
+        self.state["searched"] = {k: v for k, v in self.state.get("searched", {}).items()
+                                  if 0 <= now - v.get("at", 0) < 86400}
         for url, product in self.state["products"].items():
-            self.seeds.setdefault(product["key"], []).append(url)
+            for key in product.get("keys", [product["key"]]):
+                self.seeds.setdefault(key, []).append(url)
 
     def add(self, deal):
-        key = identity(deal)
-        if key:
+        keys = identity_keys(deal)
+        for key in keys:
             seeds = self.seeds.setdefault(key, [])
             for url in [deal.get("url"), *deal.get("store_candidates", [])]:
                 url = canonical_url(url)
                 if url and url not in seeds:
                     seeds.append(url)
                 if url:
-                    self.state["products"][url] = {"key": key, "seen_at": self.now}
+                    self.state["products"][url] = {"key": identity(deal), "keys": sorted(keys), "seen_at": self.now}
         q = quote(deal, deal.get("fetched_ts", 0))
         if q and 0 <= self.now - q["observed_at"] <= TTL:
             self.state["quotes"][q["url"]] = q
@@ -157,11 +180,11 @@ class MarketPrices:
         self.prune()
 
     def prune(self):
-        for field, limit in (("quotes", 1000), ("checked", 500), ("products", 2000)):
+        for field, limit in (("quotes", 1000), ("checked", 500), ("products", 2000), ("searched", 1000)):
             values = self.state[field]
             if len(values) > limit:
                 def stamp(item):
-                    return item[1]["observed_at"] if field == "quotes" else item[1]["seen_at"] if field == "products" else item[1]
+                    return item[1]["observed_at"] if field == "quotes" else item[1]["seen_at"] if field == "products" else item[1]["at"] if field == "searched" else item[1]
                 self.state[field] = dict(sorted(values.items(), key=stamp)[-limit:])
 
     def verify(self, url):
@@ -189,28 +212,60 @@ class MarketPrices:
 
     def compare(self, deal, min_pct, min_sav):
         key = identity(deal)
+        if not key and self.discoverer:
+            # A feed may omit the manufacturer's part number; only the store may supply it.
+            for raw in [deal.get("url"), *deal.get("store_candidates", [])]:
+                current = self.verify(raw)
+                if current:
+                    deal["product_meta"] = {"brand": current["brand"], "mpn": current["mpn"], "gtins": current["gtins"]}
+                    key = identity(deal)
+                    break
         if not key:
             return None, "не хватает точного GTIN/MPN или полной версии товара для сравнения"
+        keys = identity_keys(deal)
         own_urls = [deal.get("url"), *deal.get("store_candidates", [])]
         own_urls = [u for x in own_urls if (u := canonical_url(x))]
         if not own_urls:
             return None, "нет прямой ссылки для проверки текущей цены"
         candidate_shop = shop(own_urls[0])
+        search = self.state["searched"].get(key)
+        if (self.discoverer and self.search_remaining > 0 and time.monotonic() < self.deadline
+                and (not search or self.now - search["at"] >= 1800)):
+            limit = min(4, self.search_remaining)
+            # Reserve the quota even if the discovery adapter fails unexpectedly.
+            self.search_remaining -= limit
+            try:
+                result = self.discoverer(deal, limit=limit, deadline=min(self.deadline, time.monotonic() + 20))
+                search = {"at": self.now, "notes": result.get("notes", [])[:4]}
+                for raw in result.get("urls", [])[:12]:
+                    url = canonical_url(raw)
+                    if url and shop(url) != candidate_shop:
+                        for alias in keys:
+                            if url not in self.seeds.setdefault(alias, []):
+                                self.seeds[alias].append(url)
+                        self.state["products"][url] = {"key": key, "keys": sorted(keys), "seen_at": self.now}
+            except Exception as ex:
+                search = {"at": self.now, "notes": ["ошибка поиска: " + type(ex).__name__]}
+            self.state["searched"][key] = search
+            self.prune()
         # Verify plausible competing URLs seen in feeds; their headline price is never evidence.
-        for url in self.seeds.get(key, []):
+        for url in dict.fromkeys(u for alias in keys for u in self.seeds.get(alias, [])):
             if shop(url) != candidate_shop:
                 self.verify(url)
         refs = [q for q in self.state["quotes"].values()
-                if q["key"] == key and q["shop"] != candidate_shop
+                if keys.intersection(q.get("keys", [q["key"]])) and q["shop"] != candidate_shop
+                and not (deal.get("cat") == "pixel" and pixel_key(deal["title"]) and q.get("variant")
+                         and pixel_key(deal["title"]) != q["variant"])
                 and 0 <= self.now - q["observed_at"] <= TTL]
         by_shop = {}
         for q in refs:
             if q["shop"] not in by_shop or q["price"] < by_shop[q["shop"]]["price"]:
                 by_shop[q["shop"]] = q
         if len(by_shop) < 2:
-            return None, f"подтверждено других независимых магазинов: {len(by_shop)}/2"
+            detail = "; поиск: " + "; ".join(search["notes"]) if search else "; поиск ожидает лимита запросов" if self.discoverer else ""
+            return None, f"подтверждено других независимых магазинов: {len(by_shop)}/2" + detail
         current = self.verify(own_urls[0])
-        if not current or current["key"] != key:
+        if not current or not keys.intersection(current.get("keys", [current["key"]])):
             return None, "текущая цена, наличие или точная версия не подтверждены магазином"
         if abs(current["price"] - deal["price"]) > 0.01:
             return None, "цена магазина изменилась относительно предложения"

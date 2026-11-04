@@ -102,6 +102,13 @@ def offer_meta(product, offer, base):
     brand = product.get("brand", "")
     if isinstance(brand, dict):
         brand = brand.get("name", "")
+    mpn = product.get("mpn", "")
+    domain = market_prices.shop(base)
+    owner = "google" if domain == "store.google.com" else (domain or "").split(".")[0]
+    # On the manufacturer's own site its structured SKU is a manufacturer part number.
+    # Retailer inventory SKUs must never be used this way.
+    if not mpn and domain in market_prices.FIRST_PARTY and market_prices.normalize(brand) == owner:
+        mpn = product.get("sku", "")
     seller = offer.get("seller", "")
     if isinstance(seller, dict):
         seller = seller.get("name", "")
@@ -131,7 +138,7 @@ def offer_meta(product, offer, base):
                     rates.add(value)
             except (TypeError, ValueError):
                 pass
-    return {"brand": brand if isinstance(brand, str) else "", "mpn": product.get("mpn", ""),
+    return {"brand": brand if isinstance(brand, str) else "", "mpn": mpn,
             "gtins": [str(product[k]) for k in ("gtin", "gtin8", "gtin12", "gtin13", "gtin14") if product.get(k)],
             "currency": offer.get("priceCurrency"),
             "market": "US" if not re.search(r"/(?:uk|gb|de|fr|ca|au|jp|en-gb|en-ca)(?:/|$)", urlsplit(base).path, re.I) else None,
