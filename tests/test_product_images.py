@@ -71,26 +71,28 @@ class ImageExtraction(unittest.TestCase):
 
 @mock.patch.dict(os.environ, {"TG_BOT_TOKEN": "test-token", "TG_CHAT_ID": "test-chat"})
 class PhotoDelivery(unittest.TestCase):
-    def test_send_photo_caption_and_store_button(self):
+    def test_product_link_preview_replaces_photo_and_button(self):
         session = mock.Mock()
         session.post.return_value = response()
         bot.tg_send("<b>SSD</b> $99", session=session, photo_url=IMAGE, store_url=STORE)
         call = session.post.call_args
-        self.assertTrue(call.args[0].endswith("/sendPhoto"))
+        self.assertTrue(call.args[0].endswith("/sendMessage"))
         data = call.kwargs["json"]
-        self.assertEqual(data["photo"], IMAGE)
-        self.assertEqual(data["caption"], "<b>SSD</b> $99")
-        self.assertNotIn("text", data)
-        self.assertEqual(data["reply_markup"]["inline_keyboard"][0], [{"text": "В магазин", "url": STORE}])
+        self.assertNotIn("photo", data)
+        self.assertNotIn("reply_markup", data)
+        self.assertIn(STORE, data["text"])
+        self.assertEqual(data["link_preview_options"], {"url": STORE, "is_disabled": False,
+                                                       "prefer_large_media": True, "show_above_text": False})
 
-    def test_rejected_photo_falls_back_once_with_same_button(self):
+    def test_explicit_preview_uses_deal_not_first_reference(self):
         session = mock.Mock()
-        session.post.side_effect = [response(400, {"description": "Bad Request: failed to get HTTP URL content"}), response()]
-        bot.tg_send("SSD $99", session=session, photo_url=IMAGE, store_url=STORE)
-        self.assertEqual(session.post.call_count, 2)
+        session.post.return_value = response()
+        bot.tg_send('Сравнение: <a href="https://www.amazon.com/dp/B012345678">Amazon</a>',
+                    session=session, photo_url=IMAGE, store_url=STORE)
+        self.assertEqual(session.post.call_count, 1)
         self.assertTrue(session.post.call_args.args[0].endswith("/sendMessage"))
-        self.assertEqual(session.post.call_args.kwargs["json"]["text"], "SSD $99")
-        self.assertIn("reply_markup", session.post.call_args.kwargs["json"])
+        self.assertEqual(session.post.call_args.kwargs["json"]["link_preview_options"]["url"], STORE)
+        self.assertNotIn("reply_markup", session.post.call_args.kwargs["json"])
 
     def test_photo_timeout_never_falls_back_or_resends(self):
         session = mock.Mock()
@@ -108,11 +110,11 @@ class PhotoDelivery(unittest.TestCase):
         self.assertTrue(ctx.exception.fatal)
         self.assertEqual(session.post.call_count, 1)
 
-    def test_429_retries_photo_not_text(self):
+    def test_429_retries_text_with_same_preview(self):
         session = mock.Mock()
         session.post.side_effect = [response(429, {"parameters": {"retry_after": 2}}), response()]
         bot.tg_send("SSD", session=session, photo_url=IMAGE, sleep=lambda _: None)
-        self.assertTrue(all(c.args[0].endswith("/sendPhoto") for c in session.post.call_args_list))
+        self.assertTrue(all(c.args[0].endswith("/sendMessage") for c in session.post.call_args_list))
 
     def test_caption_limit_does_not_break_entities_or_emoji(self):
         caption = bot.photo_caption("<b>" + "📦&amp;" * 600 + "</b>")

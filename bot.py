@@ -29,6 +29,7 @@ RULES = {
     "psu": (25, 20), "case": (25, 20), "cooler": (25, 15), "prebuilt": (15, 100),
     "laptop": (15, 100), "minipc": (15, 50), "keyboard": (30, 15), "mouse": (30, 15),
     "headset": (30, 15), "microphone": (25, 20), "pixel": (15, 50),
+    "music_gear": (20, 30),
     "controller": (30, 15), "webcam": (30, 15), "networking": (25, 20),
     "dock": (25, 15), "capture": (25, 25), "printer": (25, 30), "combo": (0, 0),
 }
@@ -178,6 +179,8 @@ TAG_MAP = {"gpu": "gpu", "cpu": "cpu", "motherboard": "mobo", "mobo": "mobo", "r
            "networking": "networking", "router": "networking", "fans": "cooler"}
 # порядок важен: специфичное раньше общего (ноутбук с RTX — это laptop, а не gpu)
 CLASSIFY = [
+    # Musical keyboards must be recognized before computer peripherals.
+    ("music_gear", r"^(?!.*\b(?:sample packs?|sound packs?|plugins?|vst|software|carrying case|dust cover|power adapter|coffee|tea|perfume|cologne|whiskey|bourbon|wine|cigars?|chocolate|skincare|fragrance)\b).*?\b(?:drum[ -]?machines?|samplers?|synthesizers?|synthesisers?|roland\s+aira)\b"),
     # Only Pixel phones; exclude their cases, watches, earbuds, chargers and accessories.
     ("pixel", r"^(?!.*\b(?:case|cover|protector|charger|cable|watch|buds|screen replacement)\b).*?\b(?:google\s+)?pixel\s+\d+(?:a|\s+pro)?\b"),
     ("laptop", r"\blaptop|notebook|chromebook|macbook|ultrabook"),
@@ -436,6 +439,9 @@ def build_message(d, info):
         label = "MSRP" if d["original_kind"] == "MSRP" else "было"
         price_line += f" ({label} {fmt_price(info['claimed'])}, −{info['pct']:.0f}%)"
     lines.append(price_line)
+    direct = store_links.merchant_url(d.get("url"))
+    if direct:
+        lines.append(f'🛒 <a href="{e(direct, quote=True)}">Открыть товар в магазине</a>')
     if info.get("market"):
         m = info["market"]
         refs = ", ".join(f'<a href="{e(q["url"], quote=True)}">{e(q["shop"])}</a>' for q in m["references"])
@@ -487,18 +493,18 @@ def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=
     """Отправка с retry. Остаточный риск: если ответ потерян после доставки (read timeout),
     сообщение помечается ambiguous и НЕ отправляется повторно (лучше пропуск, чем дубль)."""
     token, chat = os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"]
-    photo = product_images.image_url(photo_url)
-    method = "sendPhoto" if photo else "sendMessage"
-    url = f"https://api.telegram.org/bot{token}/{method}"
-    if photo:
-        payload = {"chat_id": chat, "photo": photo, **photo_caption(text)}
-    else:
-        payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": False}
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    preview = {"is_disabled": False}
     if store_url:
         direct = store_links.merchant_url(store_url)
         if not direct:
             raise TelegramError("нет прямой ссылки магазина", permanent=True)
-        payload["reply_markup"] = {"inline_keyboard": [[{"text": "В магазин", "url": direct}]]}
+        escaped = html.escape(direct, quote=True)
+        if f'href="{escaped}"' not in text and direct not in text:
+            text += f'\n🛒 <a href="{escaped}">Открыть товар в магазине</a>'
+        # Select the deal, even when comparison references or channel links occur first.
+        preview.update(url=direct, prefer_large_media=True, show_above_text=False)
+    payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "link_preview_options": preview}
     last = "неизвестная ошибка"
     for attempt in range(4):
         try:
@@ -527,11 +533,6 @@ def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=
             last = f"HTTP {r.status_code}"
             sleep(2 ** attempt)
             continue
-        if photo and r.status_code == 400 and re.search(
-                r"photo|image|file|http url|web page content|caption is too long", desc, re.I):
-            # Explicit rejection means no photo was delivered; one text fallback is safe.
-            print("[WARN] Telegram не принял фото; отправляю текст с кнопкой магазина")
-            return tg_send(text, session=session, sleep=sleep, store_url=store_url)
         fatal = r.status_code in (401, 403, 404) or "chat not found" in desc.lower()
         raise TelegramError(f"Telegram HTTP {r.status_code}: {desc}", fatal=fatal, permanent=True)
     raise TelegramError(f"Telegram недоступен после повторов: {last}")
@@ -690,8 +691,6 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         d["url"] = direct
 
         photo = product_images.image_url(d.get("image_url"))
-        if not photo and image_resolver and time.monotonic() < link_deadline:
-            photo = image_resolver(direct)
         d["image_url"] = photo
 
         msg = build_message(d, info)
@@ -812,7 +811,7 @@ def main(argv=None):
     market = market_prices.MarketPrices(state, now, verifier=verify_product)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               image_resolver=product_images.from_product_page, market=market)
+                                               market=market)
     finally:
         ss(state)
         sh(hist)

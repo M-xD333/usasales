@@ -84,8 +84,9 @@ class StoreLinks(unittest.TestCase):
         session.post.return_value.json.return_value = {"ok": True}
         bot.tg_send("SSD", session=session, store_url=AMAZON)
         payload = session.post.call_args.kwargs["json"]
-        self.assertEqual(payload["reply_markup"], {
-            "inline_keyboard": [[{"text": "В магазин", "url": AMAZON}]]})
+        self.assertNotIn("reply_markup", payload)
+        self.assertIn(AMAZON, payload["text"])
+        self.assertEqual(payload["link_preview_options"]["url"], AMAZON)
         self.assertNotIn("Обсуждение", json.dumps(payload, ensure_ascii=False))
 
     @mock.patch.dict(os.environ, {"TG_BOT_TOKEN": "test", "TG_CHAT_ID": "test"})
