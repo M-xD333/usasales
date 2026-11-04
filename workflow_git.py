@@ -2,10 +2,18 @@
 import argparse
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 import subprocess
 import tempfile
+import time
+
+
+def safe_error(value):
+    value = re.sub(r"https?://[^\s]+", "[remote URL]", str(value))
+    value = re.sub(r"(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)", "***", value)
+    return value[-2000:]
 
 
 class RunnerGit:
@@ -17,7 +25,7 @@ class RunnerGit:
     def git(self, *args, env=None, check=True):
         return subprocess.run(["git", *args], cwd=self.root,
                               env={**os.environ, **(env or {})}, check=check,
-                              text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                              text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
 
     def fetch(self):
         self.git("fetch", "--no-tags", "origin", "+refs/heads/" + self.branch + ":" + self.remote)
@@ -59,25 +67,77 @@ class RunnerGit:
             return
         # A temporary index builds a state commit on the current remote code tree.
         # No rebase/merge is started and the working checkout is never switched here.
-        for _ in range(3):
-            parent = self.fetch()
-            with tempfile.TemporaryDirectory(prefix="deals-git-index-") as tmp:
-                env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
-                self.git("read-tree", parent, env=env)
-                for name, value in files.items():
-                    # Hash the captured snapshot, not files that another process could modify.
-                    local = Path(tmp) / "blob"
-                    local.write_bytes(value)
-                    blob = self.git("hash-object", "-w", str(local)).stdout.strip()
-                    self.git("update-index", "--add", "--cacheinfo", "100644", blob, name, env=env)
-                tree = self.git("write-tree", env=env).stdout.strip()
-            if tree == self.git("rev-parse", parent + "^{tree}").stdout.strip():
-                return
-            commit = self.git("commit-tree", tree, "-p", parent, "-m", "chore: persist deals-bot state").stdout.strip()
-            if self.git("push", "origin", commit + ":refs/heads/" + self.branch, check=False).returncode == 0:
-                print("State saved on latest remote commit.")
-                return
-        raise RuntimeError("state push failed after 3 attempts; stopping before further publications")
+        last_error = "unknown push failure"
+        for attempt in range(6):
+            try:
+                parent = self.fetch()
+                with tempfile.TemporaryDirectory(prefix="deals-git-index-") as tmp:
+                    env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
+                    self.git("read-tree", parent, env=env)
+                    for name, value in files.items():
+                        # Hash the captured snapshot, not files that another process could modify.
+                        local = Path(tmp) / "blob"
+                        local.write_bytes(value)
+                        blob = self.git("hash-object", "-w", str(local)).stdout.strip()
+                        self.git("update-index", "--add", "--cacheinfo", "100644", blob, name, env=env)
+                    tree = self.git("write-tree", env=env).stdout.strip()
+                if tree == self.git("rev-parse", parent + "^{tree}").stdout.strip():
+                    return
+                commit = self.git("commit-tree", tree, "-p", parent, "-m", "chore: persist deals-bot state").stdout.strip()
+                result = self.git("push", "origin", commit + ":refs/heads/" + self.branch, check=False)
+                if result.returncode == 0:
+                    print("State saved on latest remote commit.")
+                    return
+                last_error = safe_error(result.stderr or result.stdout or f"exit {result.returncode}")
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as ex:
+                last_error = safe_error(ex.stderr or ex.stdout or type(ex).__name__)
+            print(f"State push attempt {attempt + 1}/6 failed: {last_error}", flush=True)
+            if attempt < 5:
+                time.sleep(2 ** (attempt + 1))
+        raise RuntimeError("state push failed after 6 attempts; checkpoint required before further publications: " + last_error)
+
+    def restore_checkpoint(self):
+        """Recover a newer failed-run checkpoint before any Telegram publications."""
+        repo = os.environ["GITHUB_REPOSITORY"]
+        def gh(*args):
+            return subprocess.check_output(["gh", *args], cwd=self.root, text=True, timeout=120)
+        from datetime import datetime
+        from urllib.parse import quote
+        artifacts = json.loads(gh("api", f"repos/{repo}/actions/artifacts?per_page=100"))["artifacts"]
+        artifacts = [a for a in artifacts if not a.get("expired")
+                     and a["name"] == "deals-state-" + str(a.get("workflow_run", {}).get("id"))
+                     and a.get("workflow_run", {}).get("head_branch") == self.branch]
+        if not artifacts:
+            print("No recovery checkpoint required.")
+            return
+        latest = max(artifacts, key=lambda a: a["created_at"])
+        commits = json.loads(gh("api", f"repos/{repo}/commits?sha={quote(self.branch, safe='')}&path=data/state.json&per_page=1"))
+        stamp = lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if commits and stamp(latest["created_at"]) <= stamp(commits[0]["commit"]["committer"]["date"]):
+            print("Repository state is newer than the recovery checkpoint.")
+            return
+        with tempfile.TemporaryDirectory(prefix="deals-recovery-") as tmp:
+            gh("run", "download", str(latest["workflow_run"]["id"]), "--repo", repo,
+               "--name", latest["name"], "--dir", tmp)
+            recovered = {}
+            for name in ("state.json", "history.json", "seen.json"):
+                path = Path(tmp) / name
+                if not path.exists():
+                    path = Path(tmp) / "data" / name
+                if path.exists():
+                    if path.is_symlink() or path.stat().st_size > 20_000_000:
+                        raise ValueError("invalid checkpoint file: " + name)
+                    value = path.read_bytes()
+                    parsed = json.loads(value)
+                    if not isinstance(parsed, dict):
+                        raise ValueError("invalid checkpoint JSON: " + name)
+                    if name == "state.json" and not all(isinstance(parsed.get(k), dict) for k in ("posted", "processed", "pending")):
+                        raise ValueError("invalid state checkpoint structure")
+                    recovered["data/" + name] = value
+            if not {"data/state.json", "data/history.json"} <= recovered.keys():
+                raise ValueError("incomplete recovery checkpoint; stopping before publication")
+            self.restore(recovered)
+        print("Recovered newer state from " + latest["name"] + ".")
 
     def sync(self):
         files = self.snapshot()
@@ -109,7 +169,7 @@ class RunnerGit:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("push", "sync"))
+    parser.add_argument("action", choices=("push", "sync", "restore-checkpoint"))
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true":
         parser.error("this helper may only run in the disposable GitHub Actions checkout")
@@ -120,7 +180,7 @@ def main():
     runner = RunnerGit(root, os.environ["GITHUB_REF_NAME"])
     runner.git("config", "user.name", "deals-bot")
     runner.git("config", "user.email", "deals-bot@users.noreply.github.com")
-    getattr(runner, args.action)()
+    getattr(runner, args.action.replace("-", "_"))()
 
 
 if __name__ == "__main__":

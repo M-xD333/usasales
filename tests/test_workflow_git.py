@@ -14,6 +14,9 @@ def git(root, *args, check=True):
 
 class RunnerSyncTests(unittest.TestCase):
     def setUp(self):
+        sleep_patch = mock.patch("workflow_git.time.sleep")
+        sleep_patch.start()
+        self.addCleanup(sleep_patch.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="deals-git-test-")
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
@@ -111,6 +114,55 @@ class RunnerSyncTests(unittest.TestCase):
                 self.sync.push()
         self.assertFalse((self.runner / ".git/rebase-merge").exists())
         self.assertIn('"new"', (self.runner / "data/state.json").read_text())
+
+    def test_push_logs_reason_without_credentials_and_recovers(self):
+        (self.runner / "data/state.json").write_text('{"posted": {"new": 2}}')
+        real_git, attempts = self.sync.git, []
+        def transient_git(*args, **kwargs):
+            if args[0] == "push" and not attempts:
+                attempts.append(1)
+                return subprocess.CompletedProcess(args, 1, "", "remote: HTTP 503 https://user:secret@github.com/x")
+            return real_git(*args, **kwargs)
+        with mock.patch.object(self.sync, "git", side_effect=transient_git), mock.patch("builtins.print") as log:
+            self.sync.push()
+        text = str(log.call_args_list)
+        self.assertIn("HTTP 503", text)
+        self.assertNotIn("user:secret", text)
+        self.assertIn('"new"', self.remote_file("data/state.json"))
+
+    def test_recovery_restores_only_newer_valid_checkpoint(self):
+        artifact = {"id": 1, "name": "deals-state-99", "created_at": "2026-11-04T12:00:00Z",
+                    "workflow_run": {"id": 99, "head_branch": "main"}}
+        commits = [{"commit": {"committer": {"date": "2026-11-04T11:59:00Z"}}}]
+        checkpoint = {"posted": {"delivered": 1}, "processed": {}, "pending": {}}
+        def gh(args, **kwargs):
+            if "download" in args:
+                target = Path(args[args.index("--dir") + 1])
+                (target / "state.json").write_text(json.dumps(checkpoint))
+                (target / "history.json").write_text('{}')
+                return ""
+            return json.dumps({"artifacts": [artifact]} if "artifacts" in args[-1] else commits)
+        with mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "test/repo"}), mock.patch("workflow_git.subprocess.check_output", side_effect=gh):
+            self.sync.restore_checkpoint()
+        self.assertEqual(json.loads((self.runner / "data/state.json").read_text()), checkpoint)
+        # A later successful save must not be replaced by the old failed-run artifact.
+        commits[0]["commit"]["committer"]["date"] = "2026-11-04T12:01:00Z"
+        with mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "test/repo"}), mock.patch("workflow_git.subprocess.check_output", side_effect=gh) as calls:
+            self.sync.restore_checkpoint()
+        self.assertEqual(calls.call_count, 2)
+
+    def test_incomplete_checkpoint_does_not_overwrite_state(self):
+        original = (self.runner / "data/state.json").read_text()
+        artifact = {"name": "deals-state-99", "created_at": "2026-11-04T12:00:00Z",
+                    "workflow_run": {"id": 99, "head_branch": "main"}}
+        def gh(args, **kwargs):
+            if "download" in args:
+                return ""
+            return json.dumps({"artifacts": [artifact]} if "artifacts" in args[-1] else [])
+        with mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "test/repo"}), mock.patch("workflow_git.subprocess.check_output", side_effect=gh):
+            with self.assertRaisesRegex(ValueError, "incomplete"):
+                self.sync.restore_checkpoint()
+        self.assertEqual((self.runner / "data/state.json").read_text(), original)
 
     def test_broken_remote_code_does_not_replace_working_code_or_state(self):
         before = git(self.runner, "rev-parse", "HEAD").stdout
