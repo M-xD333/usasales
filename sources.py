@@ -79,317 +79,265 @@ SOURCES = [
           ("newegg-direct", "Newegg Direct", "https://www.newegg.com/todays-deals"),
           ("corsair-memory", "Corsair Memory", "https://www.corsair.com/us/en/c/memory"),
           ("corsair-psu", "Corsair Power Supplies", "https://www.corsair.com/us/en/c/psu"),
-          ("corsair-cooling", "Corsair Cooling", "https://www.corsair.com/us/en/c/cpu-coo…4284 tokens truncated…lf):
-        C = bot.classify
-        self.assertEqual(C("ASUS RTX 4070 Super Graphics Card"), "gpu")
-        self.assertEqual(C("AMD Ryzen 7 7800X3D CPU"), "cpu")
-        self.assertEqual(C("MSI Gaming Laptop RTX 4070 16GB DDR5"), "laptop")   # не gpu
-        self.assertEqual(C("Corsair 32GB DDR5-6000 Memory Kit"), "ram")
-        self.assertEqual(C("Samsung 990 PRO 2TB NVMe SSD"), "ssd")
-        self.assertEqual(C("Samsung T7 Portable SSD 1TB"), "ext_storage")
-        self.assertEqual(C("LG 27 inch 4K Monitor"), "monitor")
-        self.assertEqual(C("TP-Link WiFi 6 Router"), "networking")
-        self.assertEqual(C("Logitech G502 Gaming Mouse"), "mouse")
-        self.assertEqual(C("CyberPowerPC Gaming PC RTX 4060"), "prebuilt")
-        self.assertEqual(C("Beelink Mini PC Ryzen 7"), "minipc")
-        self.assertEqual(C("Cuisinart Food Processor"), "other")
-        self.assertEqual(C("Whatever", tag="GPU"), "gpu")
-        self.assertEqual(C("Sony TV 55 inch"), "review")
-
-    def test_condition(self):
-        D = bot.detect_condition
-        self.assertEqual(D("SSD Renewed"), "Refurbished")
-        self.assertEqual(D("GPU open box"), "Open Box")
-        self.assertEqual(D("CPU used"), "Used")
-        self.assertEqual(D("CPU"), "New")
+          ("corsair-cooling", "Corsair Cooling", "https://www.corsair.com/us/en/c/cpu-coolers"),
+          ("corsair-keyboards", "Corsair Keyboards", "https://www.corsair.com/us/en/c/keyboards"),
+          ("corsair-mice", "Corsair Mice", "https://www.corsair.com/us/en/c/gaming-mouse"),
+          ("corsair-headsets", "Corsair Headsets", "https://www.corsair.com/us/en/c/gaming-headsets"),
+          ("msi-direct", "MSI Components", "https://us-store.msi.com/Components"),
+          ("samsung-storage", "Samsung Storage", "https://www.samsung.com/us/computing/memory-storage/all-memory-storage/"),
+          ("crucial-direct", "Crucial Memory & SSD", "https://www.crucial.com/promotions"),
+          ("asus-gpu", "ASUS Graphics Cards", "https://eshop.asus.com/us/products/graphics-cards.html"),
+          ("google-pixel-direct", "Google Store Pixel", "https://store.google.com/us/collection/offers?hl=en-US"),
+      ]],
+]
 
 
-class TimeParsing(unittest.TestCase):
-    def test_utc(self):
-        t = time.struct_time((2026, 11, 3, 12, 0, 0, 1, 307, 0))
-        self.assertEqual(S.entry_timestamp({"published_parsed": t}), calendar.timegm(t))
-        self.assertEqual(S.entry_timestamp({"published_parsed": t}), 1793707200)   # 2026-11-03 12:00:00 UTC
-        self.assertEqual(S.entry_timestamp({"updated_parsed": t}), 1793707200)
-        self.assertIsNone(S.entry_timestamp({}))
+# ---------- конфигурация источников ----------
+def _ids(value):
+    return {x.strip() for x in (value or "").split(",") if x.strip()}
 
-    def test_independent_of_runner_timezone(self):
-        t = time.struct_time((2026, 11, 3, 12, 0, 0, 1, 307, 0))
-        old_tz = os.environ.get("TZ")
+
+def reddit_credentials(env=None):
+    env = os.environ if env is None else env
+    cid, sec = env.get("REDDIT_CLIENT_ID", "").strip(), env.get("REDDIT_CLIENT_SECRET", "").strip()
+    if env.get("ENABLE_REDDIT", "").lower() in ("0", "false", "no"):
+        return None
+    if cid and sec:
+        return cid, sec
+    if cid or sec:
+        raise ConfigError("Reddit: задан только один из REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET — нужны оба")
+    return None
+
+
+def active_sources(env=None, log=print):
+    env = os.environ if env is None else env
+    enable, disable = _ids(env.get("ENABLE_SOURCES")), _ids(env.get("DISABLE_SOURCES"))
+    out = []
+    for s in SOURCES:
+        if s.id in disable or not (s.enabled or s.id in enable):
+            continue
+        if s.type == "reddit":
+            try:
+                if reddit_credentials(env) is None:
+                    continue
+            except ConfigError as ex:
+                log(f"[WARN] {ex}. Reddit отключён.")
+                continue
+        out.append(s)
+    return out
+
+
+# ---------- нормализация записей ----------
+EXPIRED_RX = re.compile(r"\b(expired|sold out|out of stock|deal dead|no longer available)\b", re.I)
+
+
+def entry_timestamp(e):
+    """Unix UTC из published_parsed / updated_parsed (feedparser отдаёт UTC-кортежи)."""
+    for key in ("published_parsed", "updated_parsed"):
+        t = e.get(key)
+        if t:
+            return calendar.timegm(t)
+    return None
+
+
+def normalize_entry(e):
+    link = e.get("link", "") or ""
+    title = (e.get("title") or "").strip()
+    markup = (e.get("summary", "") or "") + "\n" + "\n".join(
+        c.get("value", "") for c in e.get("content", []))
+    candidates = store_links.extract_links(markup, link)
+    summary = re.sub(r"<[^>]+>", " ", e.get("summary", "") or "")
+    summary = re.sub(r"\s+", " ", summary).strip()[:600]
+    return {"item_id": e.get("id") or link or title, "url": link, "discuss_url": link,
+            "store_candidates": candidates,
+            "image_url": product_images.from_feed(e, markup, link),
+            "title": title, "summary": summary, "published_ts": entry_timestamp(e),
+            "expired": bool(EXPIRED_RX.search(title)), "community_score": None, "flair": ""}
+
+
+@dataclass
+class FetchResult:
+    source: Source
+    status: int | None = None
+    entries: list = field(default_factory=list)
+    not_modified: bool = False
+    error: str = ""
+    seconds: float = 0.0
+    content_type: str = ""
+    etag: str = ""
+    last_modified: str = ""
+    bozo: bool = False
+
+
+def _get(url, headers, session, attempts=2, **kw):
+    last = None
+    for i in range(attempts):
         try:
-            for tz in ("UTC", "America/New_York", "Asia/Tashkent"):
-                os.environ["TZ"] = tz
-                time.tzset()
-                self.assertEqual(S.entry_timestamp({"published_parsed": t}), 1793707200)
-        finally:
-            if old_tz is None:
-                os.environ.pop("TZ", None)
-            else:
-                os.environ["TZ"] = old_tz
-            time.tzset()
-
-    def test_no_fake_freshness(self):
-        d = deal("Samsung SSD $50", ts=None)
-        self.assertIsNone(d["published_ts"])
-        ok, info = bot.assess(d, {"n": 0, "median": None, "min": None, "max": None}, cfg(), NOW)
-        self.assertFalse(ok)
+            r = session.get(url, headers=headers, timeout=TIMEOUT, **kw)
+            if r.status_code >= 500 and i < attempts - 1:
+                time.sleep(1.5 * (i + 1))
+                continue
+            return r
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as ex:
+            last = ex
+            if i < attempts - 1:
+                time.sleep(1.5 * (i + 1))
+    raise last
 
 
-class Dedup(unittest.TestCase):
-    def test_same_product_different_feeds(self):
-        a = deal("Samsung 990 PRO 2TB NVMe SSD $119.99", item_id="a", url="https://a/1")
-        b = deal("Samsung 990 PRO 2TB NVMe SSD $119.99 + Free Shipping", item_id="b", url="https://b/2")
-        self.assertEqual(bot.dup_key(a), bot.dup_key(b))
-
-    def test_variants_not_merged(self):
-        a = deal("Samsung 990 PRO 1TB NVMe SSD $79.99")
-        b = deal("Samsung 990 PRO 2TB NVMe SSD $79.99")
-        self.assertNotEqual(bot.dup_key(a), bot.dup_key(b))
-        c = deal("Samsung 990 PRO 2TB NVMe SSD refurbished $79.99")
-        self.assertNotEqual(bot.dup_key(b), bot.dup_key(c))
-
-    def test_asin_identity(self):
-        a = deal("SSD $50", url="https://www.amazon.com/dp/B0DLFMTX12?ref=x")
-        self.assertEqual(a["ident"], "asin:B0DLFMTX12")
-
-
-class Assessment(unittest.TestCase):
-    EMPTY = {"n": 0, "median": None, "min": None, "max": None}
-
-    def test_no_new_low_without_history(self):
-        d = deal("Samsung 990 PRO 2TB NVMe SSD $60", trust="curated")
-        ok, info = bot.assess(d, self.EMPTY, cfg(), NOW)
-        self.assertTrue(ok)
-        self.assertFalse(info["new_low_obs"])
-        self.assertIsNone(info["median_pct"])
-        msg = bot.build_message(d, info)
-        self.assertNotIn("Минимум", msg)
-        self.assertNotIn("−", msg)
-
-    def test_fake_inflated_claim_rejected(self):
-        d = deal("Fake Drive 1TB NVMe SSD $70 (was $1000)")
-        stats = {"n": 4, "median": 75.0, "min": 60.0, "max": 90.0}
-        ok, info = bot.assess(d, stats, cfg(), NOW)
-        self.assertFalse(ok)
-        self.assertTrue(info["claim_bad"])
-
-    def test_real_discount_unvetted_ok(self):
-        d = deal("Samsung 990 PRO 2TB NVMe SSD $100 (was $200)")
-        ok, info = bot.assess(d, self.EMPTY, cfg(), NOW)
-        self.assertTrue(ok)
-        self.assertEqual(round(info["pct"]), 50)
-
-    def test_unvetted_without_evidence_waits(self):
-        d = deal("Samsung 990 PRO 2TB NVMe SSD $100")
-        ok, info = bot.assess(d, self.EMPTY, cfg(), NOW)
-        self.assertFalse(ok)
-        self.assertFalse(info["final"])
-
-    def test_below_median(self):
-        d = deal("Samsung 990 PRO 2TB NVMe SSD $100")
-        ok, info = bot.assess(d, {"n": 4, "median": 150.0, "min": 120.0, "max": 170.0}, cfg(), NOW)
-        self.assertTrue(ok)
-        self.assertTrue(info["new_low_obs"])
-
-    def test_reddit_needs_real_votes(self):
-        d = deal("[SSD] Samsung 990 PRO 2TB $100 (was $200) @ Amazon", trust="community", score=None)
-        self.assertFalse(bot.assess(d, self.EMPTY, cfg(), NOW)[0])
-        d = deal("[SSD] Samsung 990 PRO 2TB $100 (was $200) @ Amazon", trust="community", score=50)
-        self.assertTrue(bot.assess(d, self.EMPTY, cfg(), NOW)[0])
-
-    def test_no_fake_score_in_rss_message(self):
-        d = deal("Samsung 990 PRO 2TB NVMe SSD $100 (was $200)")
-        msg = bot.build_message(d, bot.assess(d, self.EMPTY, cfg(), NOW)[1])
-        self.assertNotIn("голоса", msg.lower())
-        self.assertIsNone(d["community_score"])
-
-    def test_old_and_expired(self):
-        old = deal("Samsung SSD $100 (was $200)", ts=NOW - 30 * 3600)
-        self.assertFalse(bot.assess(old, self.EMPTY, cfg(), NOW)[0])
-        ex = deal("Samsung SSD $100 (was $200)", expired=True)
-        self.assertFalse(bot.assess(ex, self.EMPTY, cfg(), NOW)[0])
+def fetch_rss(source, cond=None, session=requests):
+    res, t0 = FetchResult(source), time.time()
+    headers = {"User-Agent": BROWSER_UA, "Accept": "application/rss+xml, application/xml, text/xml, */*"}
+    cond = cond or {}
+    if cond.get("etag"):
+        headers["If-None-Match"] = cond["etag"]
+    if cond.get("last_modified"):
+        headers["If-Modified-Since"] = cond["last_modified"]
+    try:
+        r = _get(source.url, headers, session)
+        res.status = r.status_code
+        res.content_type = r.headers.get("Content-Type", "")
+        res.etag = r.headers.get("ETag", "")
+        res.last_modified = r.headers.get("Last-Modified", "")
+        if r.status_code == 304:
+            res.not_modified = True
+        elif r.status_code != 200:
+            res.error = f"HTTP {r.status_code}"
+        else:
+            feed = feedparser.parse(r.content)
+            res.bozo = bool(feed.bozo)
+            res.entries = [normalize_entry(e) for e in feed.entries]
+            if not res.entries and feed.bozo:
+                res.error = "ответ не похож на RSS/XML"
+    except Exception as ex:  # сеть: не роняем остальные источники
+        res.error = f"{type(ex).__name__}: {ex}"
+    res.seconds = time.time() - t0
+    return res
 
 
-class TelegramTests(unittest.TestCase):
-    def setUp(self):
-        os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"] = "123:SECRET", "@chan"
-
-    def test_html_escape(self):
-        d = deal("Corsair <b>RAM</b> & Co 32GB DDR5 $80 (was $160)", url="https://www.newegg.com/p/N82E1681?b=1&c=2")
-        msg = bot.build_message(d, bot.assess(d, Assessment.EMPTY, cfg(), NOW)[1])
-        self.assertIn("&lt;b&gt;", msg)
-        self.assertNotIn("Обсуждение", msg)
-        self.assertIn('href="https://www.newegg.com/p/N82E1681?b=1&amp;c=2"', msg)
-        self.assertLessEqual(len(msg), 4096)
-
-    def test_429_then_ok(self):
-        sess = mock.Mock()
-        sess.post.side_effect = [FakeResp(429, {"ok": False, "parameters": {"retry_after": 2}}), FakeResp(200)]
-        sleeps = []
-        bot.tg_send("hi", session=sess, sleep=sleeps.append)
-        self.assertEqual(sess.post.call_count, 2)
-        self.assertEqual(sleeps, [3])
-
-    def test_5xx_retry_then_fail(self):
-        sess = mock.Mock()
-        sess.post.return_value = FakeResp(502, {})
-        with self.assertRaises(bot.TelegramError) as cm:
-            bot.tg_send("hi", session=sess, sleep=lambda s: None)
-        self.assertFalse(cm.exception.permanent)
-        self.assertEqual(sess.post.call_count, 4)
-
-    def test_4xx_permanent_no_retry(self):
-        sess = mock.Mock()
-        sess.post.return_value = FakeResp(400, {"ok": False, "description": "Bad Request: can't parse entities"})
-        with self.assertRaises(bot.TelegramError) as cm:
-            bot.tg_send("hi", session=sess, sleep=lambda s: None)
-        self.assertTrue(cm.exception.permanent and not cm.exception.fatal)
-        self.assertEqual(sess.post.call_count, 1)
-
-    def test_chat_not_found_fatal(self):
-        sess = mock.Mock()
-        sess.post.return_value = FakeResp(400, {"ok": False, "description": "Bad Request: chat not found"})
-        with self.assertRaises(bot.TelegramError) as cm:
-            bot.tg_send("hi", session=sess)
-        self.assertTrue(cm.exception.fatal)
-
-    def test_read_timeout_ambiguous(self):
-        sess = mock.Mock()
-        sess.post.side_effect = requests.exceptions.ReadTimeout("x")
-        with self.assertRaises(bot.TelegramError) as cm:
-            bot.tg_send("hi", session=sess)
-        self.assertTrue(cm.exception.ambiguous)
-        self.assertEqual(sess.post.call_count, 1)
-
-    def test_token_redacted(self):
-        self.assertNotIn("SECRET", bot.redact("https://api.telegram.org/bot123:SECRET/sendMessage failed"))
+def fetch_reddit(source, env=None, session=requests):
+    res, t0 = FetchResult(source), time.time()
+    try:
+        creds = reddit_credentials(env)
+        if creds is None:
+            res.error = "Reddit не настроен"
+            return res
+        sub = source.url.rsplit("/", 1)[-1]
+        tok = session.post("https://www.reddit.com/api/v1/access_token", auth=creds,
+                           data={"grant_type": "client_credentials"},
+                           headers={"User-Agent": REDDIT_UA}, timeout=TIMEOUT)
+        if tok.status_code != 200:
+            res.status, res.error = tok.status_code, f"OAuth HTTP {tok.status_code}"
+            return res
+        token = tok.json().get("access_token")
+        r = session.get(f"https://oauth.reddit.com/r/{sub}/new", params={"limit": 50, "raw_json": 1},
+                        headers={"User-Agent": REDDIT_UA, "Authorization": "bearer " + str(token)}, timeout=TIMEOUT)
+        res.status = r.status_code
+        if r.status_code == 429:
+            res.error = "HTTP 429 (лимит Reddit)"
+        elif r.status_code in (401, 403):
+            res.error = f"HTTP {r.status_code} (нет доступа к API)"
+        elif r.status_code != 200:
+            res.error = f"HTTP {r.status_code}"
+        else:
+            for c in r.json()["data"]["children"]:
+                p = c["data"]
+                res.entries.append({
+                    "item_id": "reddit:" + p["id"], "url": p.get("url") or "",
+                    "image_url": product_images.image_url(p.get("thumbnail")),
+                    "discuss_url": "https://www.reddit.com" + p.get("permalink", ""),
+                    "title": p.get("title", ""), "summary": "", "published_ts": p.get("created_utc"),
+                    "expired": "expired" in (p.get("link_flair_text") or "").lower(),
+                    "community_score": int(p.get("score") or 0), "flair": p.get("link_flair_text") or ""})
+    except ConfigError as ex:
+        res.error = str(ex)
+    except Exception as ex:
+        res.error = f"{type(ex).__name__}: {ex}"
+    res.seconds = time.time() - t0
+    return res
 
 
-class Checkpoint(unittest.TestCase):
-    def _deals(self):
-        return [deal(f"Samsung 990 PRO {i}TB NVMe SSD $100 (was $200)", item_id=f"id{i}", url=f"https://www.ebay.com/itm/{i}",
-                     ts=NOW - 60 * i) for i in (1, 2)]
-
-    def test_first_saved_when_second_fails(self):
-        saved = []
-        calls = {"n": 0}
-
-        def send(msg, **kwargs):
-            calls["n"] += 1
-            if calls["n"] == 2:
-                raise bot.TelegramError("boom", permanent=False)
-
-        state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
-        bot.process(self._deals(), state, {}, NOW, cfg(), send,
-                    save_state=lambda s: saved.append(json.loads(json.dumps(s))))
-        self.assertEqual(len(state["processed"]), 1)
-        self.assertTrue(saved and len(saved[-1]["processed"]) == 1)
-        # следующий запуск: первое не повторяется, второе отправляется
-        sent = []
-        bot.process(self._deals(), state, {}, NOW + 300, cfg(), lambda text, **kw: sent.append(text))
-        self.assertEqual(len(sent), 1)
-
-    def test_newest_first_and_limit_defers(self):
-        sent = []
-        state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
-        ds = [deal(f"Samsung 990 PRO {i}TB NVMe SSD $100 (was $200)", item_id=f"id{i}", url=f"https://www.ebay.com/itm/{i}",
-                   ts=NOW - 600 * i) for i in (1, 2, 3)]
-        bot.process(ds, state, {}, NOW, cfg(max_posts=1), lambda text, **kw: sent.append(text))
-        self.assertEqual(len(sent), 1)
-        self.assertIn("1TB", sent[0])                 # самый свежий
-        self.assertEqual(len(state["pending"]), 2)    # остальные не потеряны
-        bot.process([], state, {}, NOW + 300, cfg(max_posts=1), lambda text, **kw: sent.append(text))   # даже если лента отдала 304/пусто
-        self.assertEqual(len(sent), 2)
-
-    def test_dry_run_leaves_state_untouched(self):
-        state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
-        sent = []
-        bot.process(self._deals(), state, {}, NOW, cfg(), lambda text, **kw: sent.append(text), dry=True, log=lambda *_: None)
-        self.assertEqual(sent, [])
-        self.assertEqual(state["processed"], {})
-        self.assertEqual(state["posted"], {})
-
-    def test_price_change_reevaluated(self):
-        state = {"processed": {}, "posted": {}, "pending": {}, "sources": {}, "review": []}
-        sent = []
-        a = deal("Samsung 990 PRO 2TB NVMe SSD $100 (was $200)", item_id="same", url="https://www.ebay.com/itm/s")
-        bot.process([a], state, {}, NOW, cfg(), lambda text, **kw: sent.append(text))
-        b = deal("Samsung 990 PRO 2TB NVMe SSD $80 (was $200)", item_id="same", url="https://www.ebay.com/itm/s")
-        bot.process([b], state, {}, NOW + 300, cfg(), lambda text, **kw: sent.append(text))
-        self.assertEqual(len(sent), 2)
-
-    def test_atomic_write(self):
-        with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "s.json"
-            bot.atomic_write_json(p, {"a": 1})
-            self.assertEqual(json.loads(p.read_text()), {"a": 1})
-            self.assertEqual([f.name for f in Path(d).iterdir()], ["s.json"])
+def fetch_store(source, cond=None, session=requests):
+    res, t0 = FetchResult(source), time.monotonic()
+    state = cond or {}
+    interval = 1800 if state.get("errors", 0) else 900
+    if time.time() - state.get("last_attempt", 0) < interval:
+        res.status, res.not_modified = 304, True
+        return res
+    try:
+        headers = {"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"}
+        # US catalog only; never bypass CAPTCHA/access challenges.
+        r = session.get(source.url, headers=headers, timeout=(4, 10))
+        res.status, res.content_type = r.status_code, r.headers.get("Content-Type", "")
+        if r.status_code != 200:
+            res.error = f"прямой магазин: HTTP {r.status_code}"
+            return res
+        if re.search(r"<title[^>]*>[^<]*(?:captcha|robot check|just a moment)|verify you are human|/errors/validateCaptcha",
+                     r.text[:15000], re.I):
+            res.error = "магазин требует проверку браузера; данные не получены"
+            return res
+        res.entries = direct_stores.parse_catalog(r.text, r.url)
+        if not res.entries:
+            links = direct_stores.product_links(r.text, r.url)
+            for url in links:
+                if time.monotonic() - t0 > 20:
+                    break
+                p = session.get(url, headers=headers, timeout=(3, 5))
+                if p.status_code == 200:
+                    res.entries.extend(direct_stores.parse_catalog(p.text, p.url))
+            if not res.entries:
+                res.error = "нет однозначных USD-цен товаров: JS-каталог, блокировка или изменённая разметка"
+    except (requests.RequestException, ValueError, TypeError, KeyError, RecursionError) as ex:
+        res.error = f"{type(ex).__name__}: {ex}"
+    finally:
+        res.seconds = time.monotonic() - t0
+    return res
 
 
-class SourceConfig(unittest.TestCase):
-    def test_reddit_requires_both(self):
-        with self.assertRaises(S.ConfigError):
-            S.reddit_credentials({"REDDIT_CLIENT_ID": "x"})
-        self.assertIsNone(S.reddit_credentials({}))
-        self.assertEqual(S.reddit_credentials({"REDDIT_CLIENT_ID": "a", "REDDIT_CLIENT_SECRET": "b"}), ("a", "b"))
-        self.assertIsNone(S.reddit_credentials({"REDDIT_CLIENT_ID": "a", "REDDIT_CLIENT_SECRET": "b", "ENABLE_REDDIT": "0"}))
-
-    def test_enable_disable(self):
-        ids = {s.id for s in S.active_sources({"ENABLE_SOURCES": "techbargains", "DISABLE_SOURCES": "sd-hot"}, log=lambda *_: None)}
-        self.assertIn("techbargains", ids)
-        self.assertNotIn("sd-hot", ids)
-        self.assertNotIn("dealnews-computers", ids)
-        self.assertNotIn("reddit-buildapcsales", ids)
-
-    def test_dry_flag_parsing(self):
-        for v, exp in (("1", True), ("true", True), ("YES", True), ("0", False), ("", False)):
-            with mock.patch.dict(os.environ, {"DRY_RUN": v}):
-                self.assertEqual(bot.is_dry(), exp)
-
-    def test_304_handling(self):
-        sess = mock.Mock()
-        sess.get.return_value = mock.Mock(status_code=304, headers={})
-        r = S.fetch_rss(S.SOURCES[0], {"etag": "abc"}, session=sess)
-        self.assertTrue(r.not_modified)
-        self.assertEqual(sess.get.call_args.kwargs["headers"]["If-None-Match"], "abc")
+def fetch_market_product(url, session=requests):
+    """Read an exact merchant product page; never trust a feed's advertised price."""
+    url = market_prices.canonical_url(url)
+    if not url:
+        return None
+    try:
+        with session.get(url, headers={"User-Agent": BROWSER_UA, "Accept-Language": "en-US"},
+                         timeout=(3, 5), allow_redirects=False, stream=True) as response:
+            if response.status_code != 200:
+                return None
+            chunks, size = [], 0
+            for chunk in response.iter_content(65536):
+                size += len(chunk)
+                if size > 2_000_000:
+                    return None
+                chunks.append(chunk)
+            body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+        for entry in direct_stores.parse_catalog(body, url):
+            if market_prices.canonical_url(entry["url"]) == url:
+                return entry
+    except (requests.RequestException, ValueError, TypeError):
+        pass
+    return None
 
 
-class RealTitles(unittest.TestCase):
-    """Заголовки из реального smoke-теста (Slickdeals, 2026-11-03)."""
-
-    def D(self, title):
-        return bot.make_deal(entry(title), src("curated"), NOW)
-
-    def test_store_in_brackets_is_not_category(self):
-        d = self.D("[Micro Center] PowerSpec G536 Gaming PC: Ryzen 5 7500X3D, RTX 5070 12GB, 32GB DDR5, 1TB SSD $1600 + Free Shipping")
-        self.assertEqual((d["cat"], d["tag"], d["store"], d["price"]), ("prebuilt", "", "Micro Center", 1600.0))
-        self.assertTrue(d["name"].startswith("PowerSpec"))
-
-    def test_laptop_without_word_laptop(self):
-        d = self.D('(Refurb) Dell Latitude 5450: Intel Ultra 7 165U 32GB RAM 256GB SSD 14" Touch W11P $518.39')
-        self.assertEqual((d["cat"], d["cond"], d["store"]), ("laptop", "Refurbished", ""))   # Dell — бренд, не магазин
-        d = self.D('$1699 | Acer Nitro Slim 16" AMD Ryzen AI 7 350, RTX 5070 Ti, 16GB RAM 512GB SSD')
-        self.assertEqual((d["cat"], d["price"]), ("laptop", 1699.0))
-        self.assertTrue(d["name"].startswith("Acer Nitro"))
-
-    def test_motherboard_with_wifi(self):
-        d = self.D("MSI MAG X870E Gaming Max WiFi AM5 ATX Motherboard $169.99 at Walmart")
-        self.assertEqual((d["cat"], d["store"]), ("mobo", "Walmart"))
-
-    def test_price_first_format(self):
-        d = self.D("$99* | 15.6″ ASUS ZenScreen 1080p USB-C Portable Monitor w/ Kickstand & Tripod Socket at Amazon")
-        self.assertEqual((d["cat"], d["price"], d["store"]), ("monitor", 99.0, "Amazon"))
-        self.assertNotIn("$", d["name"])
-
-    def test_from_price_and_non_tech(self):
-        d = self.D('[Open-Box YMMV] Lenovo Legion Go 8.8" Handheld PC Console w/ Ryzen Z1 Extreme: 512GB from $515; 1TB')
-        self.assertIsNone(d["price"])
-        self.assertEqual(d["issue"], "price_from")
-        self.assertEqual(self.D("150' Outdoor Basic 1080-LED Rope Lights (Various Colors) $30")["cat"], "other")
-
-    def test_plain_parts_unaffected(self):
-        self.assertEqual(self.D("Samsung 990 PRO 2TB NVMe M.2 SSD $119.99")["cat"], "ssd")
-        self.assertEqual(self.D("TP-Link AXE5400 Tri-Band WiFi 6E Router for $99 + free shipping")["cat"], "networking")
+def fetch_one(source, cond=None):
+    if source.type == "store":
+        return fetch_store(source, cond)
+    return fetch_reddit(source) if source.type == "reddit" else fetch_rss(source, cond)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def fetch_all(sources, state_sources=None, workers=3, deadline=120):
+    """Параллельная загрузка с ограничением числа потоков и общим дедлайном."""
+    state_sources = state_sources or {}
+    results = []
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(fetch_one, s, state_sources.get(s.id)): s for s in sources}
+        try:
+            for f in as_completed(futs, timeout=deadline):
+                results.append(f.result())
+        except Exception as e:  # TimeoutError по общему дедлайну
+            done = {r.source.id for r in results}
+            for s in sources:
+                if s.id not in done:
+                    results.append(FetchResult(s, error=f"не успел за {deadline} с ({type(e).__name__})"))
+    order = {s.id: i for i, s in enumerate(sources)}
+    return sorted(results, key=lambda r: order[r.source.id])
