@@ -143,7 +143,7 @@ def offer_meta(product, offer, base):
             "currency": offer.get("priceCurrency"),
             "market": "US" if not re.search(r"/(?:uk|gb|de|fr|ca|au|jp|en-gb|en-ca)(?:/|$)", urlsplit(base).path, re.I) else None,
             "condition": condition,
-            "in_stock": str(offer.get("availability", "")).rsplit("/", 1)[-1] == "InStock",
+            "in_stock": (str(offer["availability"]).rsplit("/", 1)[-1] == "InStock") if offer.get("availability") else None,
             "shipping": rates.pop() if len(rates) == 1 else None,
             "seller": seller if isinstance(seller, str) else ""}
 
@@ -273,20 +273,40 @@ def retail_cards(doc, base):
     return out
 
 
-def parse_catalog(markup, base):
+def parse_catalog(markup, base, *, include_conflicts=False):
     doc = Document(markup).root
     schema = jsonld_entries(doc, base)
     native = corsair_catalog(doc, base, schema)
     entries = native if native is not None else schema + retail_cards(doc, base)
     unique = {}
+    conflicts = {}
     for e in entries:
         # Conflicting variant prices for the same URL are unsafe: skip the product.
         key = e["item_id"]
         if key in unique and (unique[key] is None or unique[key]["store_price"] != e["store_price"]):
+            previous = unique[key] or conflicts[key]
+            conflicts[key] = {**previous, 'store_price': None, 'price_conflict': True}
             unique[key] = None
         else:
             unique[key] = e
-    return [e for e in unique.values() if e][:100]
+    out = [e or conflicts[key] for key, e in unique.items() if e or include_conflicts][:100]
+    # Exact-page coupon widgets only; never borrow coupons from recommended products.
+    coupon_text = " ".join(n.text for name in ("couponText", "coupon_feature_div", "promoPriceBlockMessage_feature_div")
+                           for n in doc.find(id=name))
+    if coupon_text and not market_prices.conditional_phone(coupon_text) and not re.search(r"prime|member|subscribe|cashback|rebate", coupon_text, re.I):
+        amounts = re.findall(r"\$\s*(\d+(?:\.\d{1,2})?)", coupon_text)
+        percents = re.findall(r"\b(\d{1,2})\s*%", coupon_text)
+        if (len(amounts) == 1) != (len(percents) == 1):
+            for e in out:
+                if e['store_price'] is None:
+                    continue
+                if market_prices.canonical_url(e['url']) != market_prices.canonical_url(base):
+                    continue
+                amount = float(amounts[0]) if amounts else round(e['store_price'] * float(percents[0]) / 100, 2)
+                if 0 < amount < e['store_price']:
+                    e['product_meta']['coupon'] = {'verified': True, 'public': True, 'amount': amount,
+                        'final_price': round(e['store_price'] - amount, 2)}
+    return out
 
 
 def product_links(markup, base):

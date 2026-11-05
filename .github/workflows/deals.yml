@@ -46,13 +46,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Unit tests
-        run: python -m unittest discover -s tests
+        run: python -m pytest -q
 
       - name: Restore newer recovery checkpoint
         id: restore
@@ -60,9 +62,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
-        run: |
-          python workflow_git.py restore-checkpoint
-          python workflow_git.py push
+        run: python workflow_git.py restore-checkpoint
+
+      - name: Verify initial checkpoint persistence
+        id: preflight
+        run: python workflow_git.py push
 
       - name: Run bot (continuous loop)
         id: bot
@@ -164,7 +168,7 @@ jobs:
           always() && !cancelled() &&
           (github.event_name == 'schedule' ||
            (github.event_name == 'workflow_dispatch' && inputs.loop && inputs.mode == 'run' && !inputs.dry_run)) &&
-          (success() || steps.backup.outcome == 'success')
+          (success() || steps.backup.outcome == 'success' || steps.restore.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ github.ref_name }}

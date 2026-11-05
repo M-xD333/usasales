@@ -12,6 +12,7 @@ import requests
 import store_links
 import direct_stores
 import product_images
+import merchant_http
 import market_prices
 
 BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -276,7 +277,7 @@ def fetch_store(source, cond=None, session=requests):
                      r.text[:15000], re.I):
             res.error = "магазин требует проверку браузера; данные не получены"
             return res
-        res.entries = direct_stores.parse_catalog(r.text, r.url)
+        res.entries = direct_stores.parse_catalog(r.text, r.url, include_conflicts=True)
         if not res.entries:
             links = direct_stores.product_links(r.text, r.url)
             for url in links:
@@ -284,7 +285,7 @@ def fetch_store(source, cond=None, session=requests):
                     break
                 p = session.get(url, headers=headers, timeout=(3, 5))
                 if p.status_code == 200:
-                    res.entries.extend(direct_stores.parse_catalog(p.text, p.url))
+                    res.entries.extend(direct_stores.parse_catalog(p.text, p.url, include_conflicts=True))
             if not res.entries:
                 res.error = "нет однозначных USD-цен товаров: JS-каталог, блокировка или изменённая разметка"
     except (requests.RequestException, ValueError, TypeError, KeyError, RecursionError) as ex:
@@ -300,8 +301,11 @@ def fetch_market_product(url, session=requests):
     if not url:
         return None
     try:
-        with session.get(url, headers={"User-Agent": BROWSER_UA, "Accept-Language": "en-US"},
-                         timeout=(3, 5), allow_redirects=False, stream=True) as response:
+        response = merchant_http.get(url, session=session, headers={"User-Agent": BROWSER_UA, "Accept-Language": "en-US"},
+                                     timeout=(3, 5), stream=True)
+        if response is None:
+            return None
+        with response as response:
             if response.status_code != 200:
                 return None
             chunks, size = [], 0
@@ -311,8 +315,9 @@ def fetch_market_product(url, session=requests):
                     return None
                 chunks.append(chunk)
             body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
-        for entry in direct_stores.parse_catalog(body, url):
-            if market_prices.canonical_url(entry["url"]) == url:
+        final_url = response.url if isinstance(response.url, str) else url
+        for entry in direct_stores.parse_catalog(body, final_url):
+            if market_prices.canonical_url(entry["url"]) == market_prices.canonical_url(final_url):
                 return entry
     except (requests.RequestException, ValueError, TypeError):
         pass
@@ -325,19 +330,62 @@ def fetch_one(source, cond=None):
     return fetch_reddit(source) if source.type == "reddit" else fetch_rss(source, cond)
 
 
+def _fetch_worker(pipe, source, cond):
+    try:
+        pipe.send(fetch_one(source, cond))
+    except BaseException as ex:
+        pipe.send(FetchResult(source, error=type(ex).__name__ + ': ' + str(ex)))
+    finally:
+        pipe.close()
+
+
 def fetch_all(sources, state_sources=None, workers=3, deadline=120):
-    """Параллельная загрузка с ограничением числа потоков и общим дедлайном."""
+    """Bounded child processes: a slow body/parser cannot hold the entire cycle."""
+    import multiprocessing
+    context = multiprocessing.get_context('fork' if 'fork' in multiprocessing.get_all_start_methods() else 'spawn')
     state_sources = state_sources or {}
-    results = []
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_one, s, state_sources.get(s.id)): s for s in sources}
-        try:
-            for f in as_completed(futs, timeout=deadline):
-                results.append(f.result())
-        except Exception as e:  # TimeoutError по общему дедлайну
-            done = {r.source.id for r in results}
-            for s in sources:
-                if s.id not in done:
-                    results.append(FetchResult(s, error=f"не успел за {deadline} с ({type(e).__name__})"))
+    limit = time.monotonic() + deadline
+    remaining = list(sources)
+    active, results = [], []
+    try:
+        while (remaining or active) and time.monotonic() < limit:
+            while remaining and len(active) < workers:
+                source = remaining.pop(0)
+                reader, writer = context.Pipe(duplex=False)
+                child = context.Process(target=_fetch_worker, args=(writer, source, state_sources.get(source.id)))
+                child.start()
+                writer.close()
+                active.append((child, reader, source, time.monotonic()))
+            for task in active[:]:
+                child, reader, source, started = task
+                if reader.poll():
+                    try:
+                        results.append(reader.recv())
+                    except EOFError:
+                        results.append(FetchResult(source, error='worker exited without data'))
+                    active.remove(task)
+                    reader.close()
+                    child.join(timeout=.1)
+                    if child.is_alive():
+                        child.kill(); child.join()
+                elif not child.is_alive() or time.monotonic() - started > min(40, deadline):
+                    results.append(FetchResult(source, error='source exceeded its wall-clock deadline'))
+                    active.remove(task)
+                    reader.close()
+                    if child.is_alive():
+                        child.kill()
+                    child.join()
+            if active:
+                time.sleep(min(.01, max(0, limit - time.monotonic())))
+    finally:
+        for child, reader, source, _ in active:
+            if child.is_alive():
+                child.kill()
+            child.join()
+            reader.close()
+    done = {r.source.id for r in results}
+    for source in sources:
+        if source.id not in done:
+            results.append(FetchResult(source, error=f'не успел за {deadline} с (TimeoutError)'))
     order = {s.id: i for i, s in enumerate(sources)}
     return sorted(results, key=lambda r: order[r.source.id])

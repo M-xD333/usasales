@@ -7,6 +7,7 @@ from urllib.parse import quote_plus, urljoin
 import requests
 import direct_stores
 import market_prices as M
+import merchant_http
 
 UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36'
 BRANDS = {M.normalize(d.split('.')[0]): d for d in M.FIRST_PARTY}
@@ -90,8 +91,15 @@ def read_page(url, session, deadline):
     if time.monotonic() >= deadline:
         return None, 'лимит времени'
     timeout = max(.1, min(4, (deadline - time.monotonic()) / 2))
-    with session.get(url, headers={'User-Agent': UA, 'Accept-Language': 'en-US'},
-                     timeout=(min(2, timeout), timeout), stream=True, allow_redirects=False) as response:
+    kwargs = {'headers': {'User-Agent': UA, 'Accept-Language': 'en-US'},
+              'timeout': (min(2, timeout), timeout), 'stream': True}
+    if M.shop(url):
+        response = merchant_http.get(url, session=session, deadline=deadline, **kwargs)
+    else:
+        response = session.get(url, allow_redirects=False, **kwargs)
+    if response is None:
+        return None, 'недопустимый редирект/лимит времени'
+    with response as response:
         if response.status_code != 200:
             return None, f'HTTP {response.status_code}'
         chunks, size = [], 0
@@ -106,7 +114,7 @@ def read_page(url, session, deadline):
     return body, ''
 
 
-def discover(deal, limit=4, deadline=None, session=requests):
+def discover(deal, limit=4, deadline=None, session=requests, offset=0):
     """Bounded native store searches, plus a manufacturer-only index lookup if necessary."""
     spec = terms(deal)
     if not spec:
@@ -124,6 +132,9 @@ def discover(deal, limit=4, deadline=None, session=requests):
             plans.append((brand, 'https://www.bing.com/search?format=rss&q=' + quote_plus(query), True))
     plans += [(domain, template.format(query=quote_plus(spec['query'])), False)
               for domain, template in RETAIL.items() if domain != own]
+    if plans:
+        offset %= len(plans)
+        plans = plans[offset:] + plans[:offset]
     urls, notes, count = [], [], 0
     for domain, url, rss in plans[:max(0, min(limit, 4))]:
         if time.monotonic() >= deadline:
@@ -145,4 +156,8 @@ def discover(deal, limit=4, deadline=None, session=requests):
             urls.extend(found)
         except (requests.RequestException, ET.ParseError, ValueError, TypeError, RecursionError) as ex:
             notes.append(domain + ': ' + type(ex).__name__)
-    return {'urls': list(dict.fromkeys(urls))[:12], 'notes': notes, 'requests': count}
+    return {'urls': list(dict.fromkeys(urls))[:12], 'notes': notes, 'requests': count,
+            'next_offset': offset + count}
+
+
+discover.supports_offset = True

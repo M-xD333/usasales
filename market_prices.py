@@ -71,21 +71,42 @@ def pixel_key(text):
 
 
 def mpn_key(meta):
-    brand, mpn = normalize(meta.get("brand")), normalize(meta.get("mpn"))
-    if brand and len(mpn) >= 5 and re.search(r"[a-z]", mpn) and re.search(r"\d", mpn):
+    brand, mpn = normalize(meta.get("brand")), str(meta.get("mpn") or "").strip().lower()
+    if brand and 2 <= len(mpn) <= 80 and re.fullmatch(r"[a-z0-9][a-z0-9 ._/-]*", mpn):
         return "mpn:" + brand + ":" + mpn
     return None
 
 
-def identity(deal):
+def conditional_phone(text):
+    text = re.sub(r"\b(?:no|without)\s+(?:a\s+)?(?:trade[ -]?in|activation|new line|port[ -]?in)(?:\s+(?:is\s+)?(?:required|needed|necessary))?", "", text, flags=re.I)
+    text = re.sub(r"\b(?:trade[ -]?in|activation)\s+(?:is\s+)?not\s+required\b", "", text, flags=re.I)
+    return bool(re.search(r"trade[ -]?in|bill credits?|/mo\b|per month|activation|new line|port[ -]?in|with .{0,30}plan", text, re.I))
+
+
+def purchase_conditions(deal):
+    """Eligibility is distinct from identity; a coupon never removes an MPN."""
+    text = deal.get("title", "")
+    if conditional_phone(text) or set(deal.get("flags", [])) - {"free_shipping"}:
+        return {"eligible": False, "reason": "условия покупки не подтверждены"}
+    if re.search(r"members? only|membership|cashback|rebate|gift card|bundle", text, re.I):
+        return {"eligible": False, "reason": "условная цена"}
+    if deal.get("price_kind", "regular") in ("coupon", "code"):
+        coupon = (deal.get("product_meta") or {}).get("coupon") or {}
+        base = deal.get("price")
+        if not (coupon.get("verified") is True and coupon.get("public") is True):
+            return {"eligible": False, "reason": "купон ещё не подтверждён карточкой магазина"}
+        final = coupon.get("final_price")
+        if final is None and number(base) and number(coupon.get("amount")):
+            final = round(base - coupon["amount"], 2)
+        if not number(final) or final <= 0:
+            return {"eligible": False, "reason": "не определена итоговая цена купона"}
+        return {"eligible": True, "price": final}
+    return {"eligible": True, "price": deal.get("price")}
+
+
+def product_identity(deal):
     """No fuzzy title similarity. Pixel fallback requires the full retail variant."""
     meta = deal.get("product_meta") or {}
-    if deal.get("cond") != "New" or CONDITIONAL.search(deal.get("title", "")):
-        return None
-    if deal.get("flags") or deal.get("price_kind", "regular") != "regular":
-        # Free shipping is a public property, not an eligibility condition.
-        if set(deal.get("flags", [])) - {"free_shipping"} or deal.get("price_kind", "regular") != "regular":
-            return None
     text = deal.get("title", "")
     if deal.get("cat") == "pixel":
         # A phone with an unspecified carrier must not be compared with unlocked stock.
@@ -101,6 +122,9 @@ def identity(deal):
         if gtin:
             return "gtin:" + gtin
     return mpn_key(meta)
+
+
+identity = product_identity  # Compatibility with persisted data and adapters.
 
 
 def identity_keys(deal):
@@ -121,7 +145,11 @@ def quote(deal, observed_at):
     key = identity(deal)
     domain = shop(url)
     price = deal.get("price")
-    if (not key or not domain or deal.get("price_origin") != "store" or not number(price)
+    conditions = purchase_conditions(deal)
+    if not conditions["eligible"]:
+        return None
+    price = conditions["price"]
+    if (not key or not domain or deal.get("cond") != "New" or deal.get("price_origin") != "store" or not number(price)
             or price <= 0 or meta.get("currency") != "USD" or meta.get("in_stock") is not True
             or meta.get("market") != "US" or meta.get("condition") != "New"):
         return None
@@ -145,6 +173,10 @@ class MarketPrices:
         self.now, self.verifier = now, verifier
         self.remaining, self.deadline = max_requests, time.monotonic() + budget
         self.discoverer, self.search_remaining = discoverer, max_search_requests
+        self.prepared = False
+        self.searched_this_cycle = set()
+        self.raw_verified = {}
+        self.changed_urls = set()
         self.state = state.setdefault("market_prices", {"quotes": {}, "checked": {}})
         self.state["quotes"] = {u: q for u, q in self.state.get("quotes", {}).items()
                                 if number(q.get("observed_at")) and 0 <= now - q["observed_at"] <= TTL}
@@ -171,11 +203,16 @@ class MarketPrices:
                     self.state["products"][url] = {"key": identity(deal), "keys": sorted(keys), "seen_at": self.now}
         q = quote(deal, deal.get("fetched_ts", 0))
         if q and 0 <= self.now - q["observed_at"] <= TTL:
-            self.state["quotes"][q["url"]] = q
+            old = self.state["quotes"].get(q["url"])
+            if not old or q["observed_at"] >= old["observed_at"]:
+                if old and abs(old['price'] - q['price']) > .01:
+                    self.changed_urls.add(q['url'])
+                self.state["quotes"][q["url"]] = q
         else:
             # An explicit new observation that is unavailable/conditional invalidates old evidence.
             url = canonical_url(deal.get("url"))
-            if deal.get("price_origin") == "store" and url:
+            old = self.state["quotes"].get(url, {})
+            if deal.get("price_origin") == "store" and url and deal.get("fetched_ts", 0) >= old.get("observed_at", 0):
                 self.state["quotes"].pop(url, None)
         self.prune()
 
@@ -187,14 +224,17 @@ class MarketPrices:
                     return item[1]["observed_at"] if field == "quotes" else item[1]["seen_at"] if field == "products" else item[1]["at"] if field == "searched" else item[1]
                 self.state[field] = dict(sorted(values.items(), key=stamp)[-limit:])
 
-    def verify(self, url):
+    def verify(self, url, force_refresh=False):
         url = canonical_url(url)
         if not url:
             return None
         cached = self.state["quotes"].get(url)
-        if cached and self.now - cached["observed_at"] <= 900:
+        if cached and not force_refresh and self.now - cached["observed_at"] <= TTL:
             return cached
-        if url in self.state["checked"] or not self.verifier or self.remaining <= 0 or time.monotonic() >= self.deadline:
+        # Changed prices bypass old failures, but each URL gets at most one actual request per cycle.
+        if (url in self.raw_verified or (url in self.state["checked"] and not force_refresh)
+                or not self.verifier or self.remaining <= 0 or time.monotonic() >= self.deadline):
+            return cached if url in self.raw_verified else None
             return None
         self.remaining -= 1
         self.state["checked"][url] = self.now
@@ -202,6 +242,7 @@ class MarketPrices:
             deal = self.verifier(url)
         except Exception:
             deal = None
+        self.raw_verified[url] = deal
         # Remove stale evidence even when the recheck returned 403 or unknown stock.
         self.state["quotes"].pop(url, None)
         q = quote(deal, self.now) if deal else None
@@ -209,6 +250,72 @@ class MarketPrices:
             self.state["quotes"][url] = q
         self.prune()
         return q
+
+    def verify_offer(self, deal, force_refresh=False):
+        urls = [deal.get("url"), *deal.get("store_candidates", [])]
+        for raw in urls:
+            url = canonical_url(raw)
+            if not url:
+                continue
+            cached = self.state["quotes"].get(url)
+            changed = url in self.changed_urls or (cached and deal.get("price") is not None and abs(cached["price"] - deal["price"]) > .01)
+            current = self.verify(url, force_refresh=force_refresh or bool(changed))
+            source = self.raw_verified.get(url)
+            if source and deal.get("price_kind") in ("coupon", "code"):
+                candidate = dict(source, price_kind=deal["price_kind"])
+                current = quote(candidate, self.now)
+            if current and (not identity(deal) or identity_keys(deal).intersection(current.get("keys", [current["key"]]))):
+                if abs(current["price"] - deal["price"]) <= .01:
+                    return current
+        return None
+
+    def _search(self, deal):
+        key = identity(deal)
+        old = self.state["searched"].get(key, {})
+        if (not key or key in self.searched_this_cycle or not self.discoverer or self.search_remaining <= 0
+                or time.monotonic() >= self.deadline or self.now - old.get("at", -1e12) < 120):
+            return
+        self.searched_this_cycle.add(key)
+        try:
+            # One search request per product lets four products share the cycle fairly.
+            kwargs = {"limit": 1, "deadline": min(self.deadline, time.monotonic() + 20)}
+            if getattr(self.discoverer, "supports_offset", False) is True:
+                kwargs["offset"] = old.get("cursor", 0)
+            result = self.discoverer(deal, **kwargs)
+            used = result.get("requests", 1)
+            used = used if isinstance(used, int) and 0 <= used <= 1 else 1
+            self.search_remaining -= used
+            if not used:
+                return
+            self.state["searched"][key] = {"at": self.now, "notes": result.get("notes", [])[:4],
+                                            "cursor": result.get("next_offset", old.get("cursor", 0) + 1)}
+            keys = identity_keys(deal)
+            for raw in result.get("urls", [])[:12]:
+                url = canonical_url(raw)
+                if url and shop(url) != shop(deal.get("url")):
+                    for alias in keys:
+                        if url not in self.seeds.setdefault(alias, []):
+                            self.seeds[alias].append(url)
+                    self.state["products"][url] = {"key": key, "keys": sorted(keys), "seen_at": self.now}
+        except Exception as ex:
+            self.search_remaining -= 1
+            self.state["searched"][key] = {"at": self.now, "notes": ["ошибка поиска: " + type(ex).__name__]}
+        self.prune()
+
+    def prepare(self, deals):
+        candidates = {}
+        for deal in deals:
+            key = identity(deal)
+            if key and not deal.get("expired"):
+                candidates.setdefault(key, deal)
+        def rank(item):
+            key, deal = item
+            old = self.state["searched"].get(key)
+            extreme = deal.get("original") and deal.get("price") and deal["price"] < .15 * deal["original"]
+            return (old is not None, old.get("at", 0) if old else 0, not extreme, key)
+        for _, deal in sorted(candidates.items(), key=rank):
+            self._search(deal)
+        self.prepared = True
 
     def compare(self, deal, min_pct, min_sav):
         key = identity(deal)
@@ -228,26 +335,9 @@ class MarketPrices:
         if not own_urls:
             return None, "нет прямой ссылки для проверки текущей цены"
         candidate_shop = shop(own_urls[0])
+        if not self.prepared:
+            self._search(deal)
         search = self.state["searched"].get(key)
-        if (self.discoverer and self.search_remaining > 0 and time.monotonic() < self.deadline
-                and (not search or self.now - search["at"] >= 1800)):
-            limit = min(4, self.search_remaining)
-            # Reserve the quota even if the discovery adapter fails unexpectedly.
-            self.search_remaining -= limit
-            try:
-                result = self.discoverer(deal, limit=limit, deadline=min(self.deadline, time.monotonic() + 20))
-                search = {"at": self.now, "notes": result.get("notes", [])[:4]}
-                for raw in result.get("urls", [])[:12]:
-                    url = canonical_url(raw)
-                    if url and shop(url) != candidate_shop:
-                        for alias in keys:
-                            if url not in self.seeds.setdefault(alias, []):
-                                self.seeds[alias].append(url)
-                        self.state["products"][url] = {"key": key, "keys": sorted(keys), "seen_at": self.now}
-            except Exception as ex:
-                search = {"at": self.now, "notes": ["ошибка поиска: " + type(ex).__name__]}
-            self.state["searched"][key] = search
-            self.prune()
         # Verify plausible competing URLs seen in feeds; their headline price is never evidence.
         for url in dict.fromkeys(u for alias in keys for u in self.seeds.get(alias, [])):
             if shop(url) != candidate_shop:
@@ -264,7 +354,7 @@ class MarketPrices:
         if len(by_shop) < 2:
             detail = "; поиск: " + "; ".join(search["notes"]) if search else "; поиск ожидает лимита запросов" if self.discoverer else ""
             return None, f"подтверждено других независимых магазинов: {len(by_shop)}/2" + detail
-        current = self.verify(own_urls[0])
+        current = self.verify_offer(deal)
         if not current or not keys.intersection(current.get("keys", [current["key"]])):
             return None, "текущая цена, наличие или точная версия не подтверждены магазином"
         if abs(current["price"] - deal["price"]) > 0.01:
@@ -273,7 +363,7 @@ class MarketPrices:
             return None, "неизвестна стоимость доставки текущего предложения"
         # Strong identifiers must not contradict a title-only Pixel match.
         by_shop = {s: q for s, q in by_shop.items()
-                   if not (current["gtins"] and q["gtins"] and set(current["gtins"]).isdisjoint(q["gtins"]))
+                   if s != current['shop'] and not (current["gtins"] and q["gtins"] and set(current["gtins"]).isdisjoint(q["gtins"]))
                    and not (current["mpn"] and q["mpn"] and current["brand"] == q["brand"]
                             and current["mpn"] != q["mpn"])}
         if len(by_shop) < 2:

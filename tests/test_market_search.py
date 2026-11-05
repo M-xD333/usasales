@@ -156,7 +156,9 @@ class EngineDiscovery(unittest.TestCase):
         for d in (first, second):
             engine.add(d)
             engine.compare(d, 25, 20)
-        search.assert_called_once()
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(sum(c.kwargs['limit'] for c in search.call_args_list), 2)
+        self.assertEqual(engine.search_remaining, 2)
 
     def test_expired_search_deadline_never_calls_network(self):
         d = hardware('corsair.com', 100)

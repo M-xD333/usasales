@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 import time
+import checkpoints
+import state_merge
 
 
 def safe_error(value):
@@ -34,14 +36,74 @@ class RunnerGit:
     def snapshot(self):
         data = self.root / "data"
         files = {}
+        has_bundle = (data / checkpoints.FILE).exists() or (data / checkpoints.BACKUP).exists()
         for path in sorted(data.rglob("*")) if data.exists() else []:
             if not path.is_file() or path.is_symlink() or path.suffix == ".tmp":
                 continue
             value = path.read_bytes()
-            if path.suffix == ".json":
+            if path.suffix == ".json" and not (has_bundle and path.name in
+                    (checkpoints.FILE, checkpoints.BACKUP, 'state.json', 'history.json')):
                 # Never persist conflict markers or replace broken state with empty defaults.
                 json.loads(value)
             files[path.relative_to(self.root).as_posix()] = value
+        if has_bundle:
+            # Compatibility exports may be interrupted; the atomic bundle is authoritative.
+            store = checkpoints.Store(data)
+            state, history = store.load()
+            files['data/' + checkpoints.FILE] = json.dumps(store.previous, ensure_ascii=False).encode()
+            if 'data/' + checkpoints.BACKUP in files:
+                try:
+                    checkpoints.validate_bundle(json.loads(files['data/' + checkpoints.BACKUP]))
+                except (ValueError, TypeError):
+                    files.pop('data/' + checkpoints.BACKUP)
+            files['data/state.json'] = json.dumps(state, ensure_ascii=False).encode()
+            files['data/history.json'] = json.dumps(history, ensure_ascii=False).encode()
+        else:
+            if 'data/state.json' in files:
+                checkpoints.validate_state(json.loads(files['data/state.json']))
+            if 'data/history.json' in files:
+                checkpoints.validate_history(json.loads(files['data/history.json']))
+        return files
+
+    def merge_remote_state(self, files, parent):
+        def read(ref, name):
+            result = self.git('show', ref + ':data/' + name, check=False)
+            return json.loads(result.stdout) if result.returncode == 0 else None
+        remote_state = read(parent, 'state.json')
+        base_state = read('HEAD', 'state.json')
+        remote_bundle = read(parent, checkpoints.FILE)
+        local_bundle = json.loads(files['data/' + checkpoints.FILE]) if 'data/' + checkpoints.FILE in files else None
+        higher_generation = (remote_bundle or {}).get('generation_id', 0) > (local_bundle or {}).get('generation_id', 0)
+        remote_history = read(parent, 'history.json')
+        base_history = read('HEAD', 'history.json')
+        base_bundle = read('HEAD', checkpoints.FILE)
+        if (remote_state == base_state and remote_history == base_history
+                and remote_bundle == base_bundle and not higher_generation):
+            return files
+        if remote_state is None and remote_bundle is None:
+            return files
+        if remote_bundle:
+            checkpoints.validate_bundle(remote_bundle)
+            remote_state, remote_hist = remote_bundle['state'], remote_bundle['history']
+        else:
+            remote_hist = read(parent, 'history.json') or {}
+        local_state = local_bundle['state'] if local_bundle else json.loads(files['data/state.json'])
+        local_hist = local_bundle['history'] if local_bundle else json.loads(files.get('data/history.json',b'{}'))
+        if local_state == remote_state and local_hist == remote_hist:
+            if higher_generation:
+                files = dict(files)
+                files['data/' + checkpoints.FILE] = json.dumps(remote_bundle, ensure_ascii=False).encode()
+            return files
+        merged = state_merge.merge_state(remote_state, local_state)
+        history = state_merge.merge_history(remote_hist, local_hist)
+        files = dict(files)
+        encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
+        files['data/state.json'], files['data/history.json'] = encode(merged), encode(history)
+        if local_bundle or remote_bundle:
+            bundle = {'generation_id': max((local_bundle or {}).get('generation_id',0), (remote_bundle or {}).get('generation_id',0)) + 1,
+                      'saved_at': time.time(), 'state': merged, 'history': history}
+            files['data/' + checkpoints.FILE] = encode(bundle)
+        print('Concurrent remote state merged without overwriting delivery records.')
         return files
 
     def restore(self, files):
@@ -71,10 +133,11 @@ class RunnerGit:
         for attempt in range(6):
             try:
                 parent = self.fetch()
+                current_files = self.merge_remote_state(files, parent)
                 with tempfile.TemporaryDirectory(prefix="deals-git-index-") as tmp:
                     env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
                     self.git("read-tree", parent, env=env)
-                    for name, value in files.items():
+                    for name, value in current_files.items():
                         # Hash the captured snapshot, not files that another process could modify.
                         local = Path(tmp) / "blob"
                         local.write_bytes(value)
@@ -120,7 +183,7 @@ class RunnerGit:
             gh("run", "download", str(latest["workflow_run"]["id"]), "--repo", repo,
                "--name", latest["name"], "--dir", tmp)
             recovered = {}
-            for name in ("state.json", "history.json", "seen.json"):
+            for name in ("state.json", "history.json", "seen.json", checkpoints.FILE, checkpoints.BACKUP):
                 path = Path(tmp) / name
                 if not path.exists():
                     path = Path(tmp) / "data" / name
@@ -134,8 +197,30 @@ class RunnerGit:
                     if name == "state.json" and not all(isinstance(parsed.get(k), dict) for k in ("posted", "processed", "pending")):
                         raise ValueError("invalid state checkpoint structure")
                     recovered["data/" + name] = value
+            if 'data/' + checkpoints.FILE in recovered:
+                bundle = checkpoints.validate_bundle(json.loads(recovered['data/' + checkpoints.FILE]))
+                recovered['data/state.json'] = json.dumps(bundle['state'], ensure_ascii=False).encode()
+                recovered['data/history.json'] = json.dumps(bundle['history'], ensure_ascii=False).encode()
             if not {"data/state.json", "data/history.json"} <= recovered.keys():
                 raise ValueError("incomplete recovery checkpoint; stopping before publication")
+            local = self.snapshot()
+            if 'data/state.json' in local:
+                recovered['data/state.json'] = json.dumps(state_merge.merge_state(
+                    json.loads(local['data/state.json']), json.loads(recovered['data/state.json'])), ensure_ascii=False).encode()
+                recovered['data/history.json'] = json.dumps(state_merge.merge_history(
+                    json.loads(local.get('data/history.json', b'{}')), json.loads(recovered['data/history.json'])), ensure_ascii=False).encode()
+            if 'data/' + checkpoints.FILE in recovered:
+                bundle = json.loads(recovered['data/' + checkpoints.FILE])
+                bundle['generation_id'] = max(bundle['generation_id'],
+                    json.loads(local.get('data/' + checkpoints.FILE, b'{}')).get('generation_id', 0)) + 1
+                bundle['state'], bundle['history'] = json.loads(recovered['data/state.json']), json.loads(recovered['data/history.json'])
+                recovered['data/' + checkpoints.FILE] = json.dumps(bundle, ensure_ascii=False).encode()
+            elif (self.root / 'data' / checkpoints.FILE).exists():
+                # A legacy artifact must not be hidden by an older local canonical bundle.
+                store = checkpoints.Store(self.root / 'data')
+                store.load()
+                store.save(json.loads(recovered['data/state.json']), json.loads(recovered['data/history.json']))
+                recovered.pop('data/' + checkpoints.BACKUP, None)
             self.restore(recovered)
         print("Recovered newer state from " + latest["name"] + ".")
 
@@ -151,6 +236,7 @@ class RunnerGit:
             self.recover()
             head = self.fetch()
             self.validate_code(head)
+            files = self.merge_remote_state(files, head)
             # This reset is restricted by main() to an ephemeral Actions runner.
             self.git("reset", "--hard", head)
         finally:

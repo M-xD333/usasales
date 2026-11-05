@@ -88,9 +88,10 @@ class RunnerSyncTests(unittest.TestCase):
         (self.runner / "data/state.json").write_text(checkpoint)
         self.sync.sync()
         self.assertFalse((self.runner / ".git/rebase-merge").exists())
-        self.assertEqual((self.runner / "data/state.json").read_text(), checkpoint)
+        merged = json.loads((self.runner / "data/state.json").read_text())
+        self.assertEqual(merged['posted'], {'remote': 3, 'local': 2, 'latest': 4})
         self.sync.push()
-        self.assertEqual(self.remote_file("data/state.json"), checkpoint)
+        self.assertEqual(json.loads(self.remote_file("data/state.json")), merged)
 
     def test_invalid_json_is_never_pushed_or_reset(self):
         before = git(self.remote, "rev-parse", "main").stdout
@@ -144,7 +145,7 @@ class RunnerSyncTests(unittest.TestCase):
             return json.dumps({"artifacts": [artifact]} if "artifacts" in args[-1] else commits)
         with mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "test/repo"}), mock.patch("workflow_git.subprocess.check_output", side_effect=gh):
             self.sync.restore_checkpoint()
-        self.assertEqual(json.loads((self.runner / "data/state.json").read_text()), checkpoint)
+        self.assertEqual(json.loads((self.runner / "data/state.json").read_text())["posted"], {"first": 1, "delivered": 1})
         # A later successful save must not be replaced by the old failed-run artifact.
         commits[0]["commit"]["committer"]["date"] = "2026-11-04T12:01:00Z"
         with mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "test/repo"}), mock.patch("workflow_git.subprocess.check_output", side_effect=gh) as calls:
@@ -163,6 +164,52 @@ class RunnerSyncTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "incomplete"):
                 self.sync.restore_checkpoint()
         self.assertEqual((self.runner / "data/state.json").read_text(), original)
+
+    def test_concurrent_delivery_records_survive_push_race(self):
+        (self.runner / "data/state.json").write_text('{"posted":{"local":2}}')
+        real_git, raced = self.sync.git, []
+        def racing_git(*args, **kwargs):
+            if args[0] == 'push' and not raced:
+                raced.append(True)
+                self.edit_remote('data/state.json', '{"posted":{"remote":3}}')
+            return real_git(*args, **kwargs)
+        with mock.patch.object(self.sync, 'git', side_effect=racing_git):
+            self.sync.push()
+        self.assertEqual(json.loads(self.remote_file('data/state.json'))['posted'], {'remote':3, 'local':2})
+
+    def test_concurrent_history_only_update_is_merged(self):
+        (self.runner / 'data/history.json').write_text('{"p":[[1,100,"a","s"]]}')
+        self.edit_remote('data/history.json', '{"p":[[2,80,"b","s"]]}')
+        self.sync.push()
+        self.assertEqual(len(json.loads(self.remote_file('data/history.json'))['p']), 2)
+
+    def test_canonical_snapshot_repairs_interrupted_exports(self):
+        import checkpoints as C
+        store=C.Store(self.runner / 'data')
+        store.save({'posted':{'delivered':5}}, {'p':[[1,80,'a','s']]})
+        (self.runner / 'data/state.json').write_text('null')
+        (self.runner / 'data/history.json').write_text('broken')
+        self.sync.push()
+        bundle=json.loads(self.remote_file('data/checkpoint.json'))
+        self.assertEqual(json.loads(self.remote_file('data/state.json')), bundle['state'])
+        self.assertEqual(json.loads(self.remote_file('data/history.json')), bundle['history'])
+
+    def test_restore_artifact_with_only_atomic_bundle(self):
+        artifact={'name':'deals-state-99','created_at':'2026-11-04T12:00:00Z',
+                  'workflow_run':{'id':99,'head_branch':'main'}}
+        bundle={'generation_id':10,'state':{'posted':{'delivered':5}},'history':{}}
+        def gh(args, **kwargs):
+            if 'download' in args:
+                target=Path(args[args.index('--dir')+1])
+                (target/'checkpoint.json').write_text(json.dumps(bundle))
+                return ''
+            return json.dumps({'artifacts':[artifact]} if 'artifacts' in args[-1] else [])
+        with mock.patch.dict('os.environ',{'GITHUB_REPOSITORY':'test/repo'}), mock.patch('workflow_git.subprocess.check_output',side_effect=gh):
+            self.sync.restore_checkpoint()
+        import checkpoints as C
+        restored=C.Store(self.runner/'data');st,hist=restored.load()
+        self.assertEqual(st['posted'],{'first':1,'delivered':5})
+        self.assertGreater(restored.generation,10)
 
     def test_broken_remote_code_does_not_replace_working_code_or_state(self):
         before = git(self.runner, "rev-parse", "HEAD").stdout

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """US deals -> Telegram (текстовые публикации, запуск из GitHub Actions)."""
 import html
+import copy
 import json
 import os
 import re
@@ -18,6 +19,8 @@ import store_links
 import product_images
 import market_prices
 import market_search
+import checkpoints
+import offer_queue
 
 DATA = Path(__file__).parent / "data"
 STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
@@ -37,6 +40,8 @@ RULES = {
 DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
+RULES_VERSION = 3
+PARSER_VERSION = 3
 
 
 def env_int(name, default):
@@ -115,11 +120,27 @@ def parse_prices(text):
         return r
 
     has_coupon, has_code = bool(COUPON_RX.search(text)), bool(PROMO_RX.search(text))
+    r['price_kind'] = 'code' if has_code else 'coupon' if has_coupon else 'regular'
     if len(cands) > 1 and not (has_coupon or has_code):
         r["issue"] = "multiple_prices"
         return r
-    price = min(c[0] for c in cands)
+    base, coupon = None, None
+    pair = re.search(AMT.pattern + r"\s+(?:with|w/|using|less|minus|after)\s+(?:a\s+)?" + AMT.pattern + r"\s*(?:off\s+)?coupon\b", text, re.I)
+    if len(cands) > 1 or pair:
+        # Amounts are roles, never competing guesses for the final price.
+        if not pair or len(cands) + len(offs) != 2:
+            r["issue"] = "ambiguous_coupon_price"
+            return r
+        base, coupon = (float(pair.group(i).replace(",", "")) for i in (1, 2))
+        if not 0 < coupon < base:
+            r["issue"] = "invalid_coupon_amount"
+            return r
+        price = round(base - coupon, 2)
+    else:
+        price = cands[0][0]
     r["price"] = price
+    r["price_components"] = {"base_price": base or price, "coupon_amount": coupon,
+                             "final_price": price, "reference_price": origs[0][0] if origs else None}
     if has_coupon:
         r["price_kind"] = "coupon"
     if has_code:
@@ -234,6 +255,8 @@ STOPWORDS = {"new", "free", "shipping", "w", "with", "after", "coupon", "code", 
 
 
 def classify(text, tag=""):
+    # A gift does not change the primary product into an accessory/software listing.
+    text = re.split(r"(?:\b(?:with|includes?|including|plus)|\+)\s+(?:(?:a|an)\s+)?(?:free|bonus|complimentary)\b", text, maxsplit=1, flags=re.I)[0]
     t = (tag or "").strip().lower()
     if t in TAG_MAP:
         return TAG_MAP[t]
@@ -283,16 +306,19 @@ def make_deal(entry, source, now):
                 and 0 < price < 100000):
             pi.update(price=direct_price, issue=None, original=entry.get("store_original"),
                       original_kind="MSRP" if entry.get("store_original") else None)
+            coupon = (entry.get('product_meta') or {}).get('coupon') or {}
+            if coupon.get('verified') and coupon.get('public') and market_prices.number(coupon.get('final_price')):
+                pi.update(price=coupon['final_price'], price_kind='coupon')
+                pi['price_components'] = {'base_price': direct_price, 'coupon_amount': coupon.get('amount'),
+                                          'final_price': coupon['final_price']}
         else:
             pi.update(price=None, issue="invalid_store_price", original=None)
     cat = classify(rest, tag or entry.get("flair", ""))
     name = extract_name(rest, pi.get("first_price_pos"))
     asin_m = ASIN_RX.search(entry["url"] or "") or ASIN_RX.search(entry.get("summary", ""))
     asin = asin_m.group(1) if asin_m else None
-    cond = detect_condition(title)
-    if cat == "pixel" and re.search(
-            r"trade[ -]?in|bill credits?|/mo\b|per month|activation|new line|port[ -]?in|with .{0,30}plan",
-            title + " " + entry.get("summary", ""), re.I):
+    cond = (entry.get("product_meta", {}).get("condition") if source.type == "store" else None) or detect_condition(title)
+    if cat == "pixel" and market_prices.conditional_phone(title + " " + entry.get("summary", "")):
         pi["flags"].add("conditional_phone_price")
     ts = entry.get("published_ts")
     undated = ts is None
@@ -309,6 +335,7 @@ def make_deal(entry, source, now):
         "store_candidates": entry.get("store_candidates", []),
         "product_meta": entry.get("product_meta", {}) if source.type == "store" else {},
         "price_origin": "store" if source.type == "store" else "feed",
+        "price_components": pi.get("price_components", {}),
         "image_url": product_images.image_url(entry.get("image_url")),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
         "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
@@ -349,10 +376,12 @@ def add_sample(samples, d, now):
 def assess(d, stats, cfg, now, market_evidence=None):
     """Решение о публикации. Возвращает (ok, info). info['reason'] — причина отказа/ожидания."""
     info = {"claimed": None, "pct": 0.0, "sav": 0.0, "claim_bad": False, "median_pct": None,
-            "new_low_obs": False, "reason": "", "final": False}
+            "new_low_obs": False, "reason": "", "final": False, "status": "insufficient_data",
+            "priority_verification": False}
 
     def no(reason, final=False):
         info["reason"], info["final"] = reason, final
+        info["status"] = "contradictory_data" if final else "insufficient_data"
         return False, info
 
     if not d["publish"]:
@@ -365,6 +394,8 @@ def assess(d, stats, cfg, now, market_evidence=None):
         return no("категория не распознана", True)
     if d["expired"]:
         return no("сделка помечена как expired/sold out", True)
+    if (d.get("product_meta") or {}).get("in_stock") is False:
+        return no("магазин подтвердил отсутствие товара", True)
     if d["published_ts"] is None:
         return no("нет даты публикации", True)
     age_h = (now - d["published_ts"]) / 3600
@@ -380,12 +411,14 @@ def assess(d, stats, cfg, now, market_evidence=None):
 
     if orig and orig > price:
         pct, sav = (orig - price) / orig * 100, orig - price
-        suspicious = pct > MAX_SANE_DISCOUNT or (n >= 3 and med and orig > INFLATE_FACTOR * med)
+        info["priority_verification"] = pct > MAX_SANE_DISCOUNT
+        suspicious = n >= 3 and med and orig > INFLATE_FACTOR * med
         if suspicious:
             info["claim_bad"] = True
         else:
             info.update(claimed=orig, pct=pct, sav=sav)
-    strong_claim = info["claimed"] is not None and info["pct"] >= min_pct and info["sav"] >= min_sav
+    strong_claim = (info["claimed"] is not None and info["pct"] >= min_pct and info["sav"] >= min_sav
+                    and not info["priority_verification"])
 
     strong_obs = False
     if n >= 3 and med:
@@ -394,6 +427,8 @@ def assess(d, stats, cfg, now, market_evidence=None):
         strong_obs = info["median_pct"] >= min_pct and (med - price) >= min_sav
 
     trust, score = d["trust"], d["community_score"]
+    if info["priority_verification"]:
+        return no("экстремальная скидка: приоритетная проверка цены")
     if trust == "community":
         if score is None:
             return no("нет реальных голосов сообщества")
@@ -451,6 +486,8 @@ def build_message(d, info):
     lines.append(f"⚠️ Условие: {d['cond']}")
     if d["store"]:
         lines.append(f"🏪 Магазин: {e(d['store'])}")
+    if info.get('verified_offer') and info['verified_offer'].get('shipping') is None:
+        lines.append('ℹ️ Стоимость доставки уточняйте в магазине')
     if info["median_pct"] is not None and info["median_pct"] >= 10:
         lines.append(f"📉 Ниже медианы наших наблюдений на {info['median_pct']:.0f}%")
     if info["new_low_obs"]:
@@ -466,14 +503,21 @@ def build_message(d, info):
     if link:
         lines += ["", "———————————————", f"📢 Ссылка для друзей: {e(link)}"]
     text = "\n".join(lines)
-    return text if len(text) <= 4000 else text[:3990] + "…"
+    if len(html.unescape(re.sub(r"<[^>]+>", "", text)).encode('utf-16-le')) <= 7900 and len(text) < 12000:
+        return text
+    # Assemble a fresh valid document; never slice an HTML tag, entity or attribute.
+    name = e(d['name'][:150])
+    direct = store_links.merchant_url(d.get('url'))
+    link = f'\n🛒 <a href="{e(direct, quote=True)}">Открыть товар в магазине</a>' if direct and len(direct) < 2000 else ''
+    return f"📦 <b>{name}</b>\n💰 Цена: <b>{fmt_price(d['price'])}</b>\nУсловие: {e(d['cond'])}" + link
 
 
 # ============================== Telegram ==============================
 class TelegramError(Exception):
-    def __init__(self, msg, fatal=False, permanent=False, ambiguous=False):
+    def __init__(self, msg, fatal=False, permanent=False, ambiguous=False, retry_after=0):
         super().__init__(msg)
         self.fatal, self.permanent, self.ambiguous = fatal, permanent, ambiguous
+        self.retry_after = retry_after
 
 
 def redact(text):
@@ -526,7 +570,9 @@ def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=
             return data
         desc = str(data.get("description", ""))[:200]
         if r.status_code == 429:
-            wait = min(int(data.get("parameters", {}).get("retry_after", 5)), 60) + 1
+            wait = max(1, int(data.get("parameters", {}).get("retry_after", 5))) + 1
+            if wait > 60:
+                raise TelegramError('Telegram rate limit: сообщение сохранено в очереди', retry_after=wait)
             last = f"429, ждём {wait} с"
             sleep(wait)
             continue
@@ -559,28 +605,27 @@ def atomic_write_json(path, obj):
 def _load(path, default):
     try:
         return json.loads(Path(path).read_text())
-    except Exception:
+    except FileNotFoundError:
         return default
 
 
 def load_state():
-    st = _load(DATA / STATE_F, None)
-    if st is None:  # миграция со старой версии (seen.json)
-        old = _load(DATA / LEGACY_SEEN_F, {})
-        st = {"version": 2, "processed": {k: v for k, v in old.items() if not k.startswith("k:")},
-              "posted": {}, "pending": {}, "sources": {}, "review": []}
+    st, _ = checkpoints.Store(DATA).load()
     for k, default in (("processed", {}), ("posted", {}), ("pending", {}), ("sources", {}), ("review", [])):
         st.setdefault(k, default)
     return st
 
 
 def trim_state(st, now, cfg):
-    st["pending"] = dict(sorted(((k, d) for k, d in st["pending"].items()
-                                if d.get("published_ts") and now - d["published_ts"] <= cfg["max_age_h"] * 3600),
-                               key=lambda kv: kv[1].get("published_ts", 0))[-500:])
+    st["pending"] = dict(((k, d) for k, d in st["pending"].items()
+                                if now - (d.get("published_ts") or d.get('fetched_ts', 0)) <= cfg["max_age_h"] * 3600),
+                               )
     st["posted"] = {k: v for k, v in st["posted"].items() if now - v < max(cfg["dup_hours"], 24) * 3600 * 2}
     st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
     st["review"] = st["review"][-100:]
+    for field, stamp in (('assessment_cache', 'at'), ('price_events', 'observed_at')):
+        if field in st:
+            st[field] = {k: v for k, v in st[field].items() if now - v.get(stamp, 0) < cfg['hist_days'] * 86400}
 
 
 def prune_history(hist, now, days):
@@ -592,142 +637,171 @@ def prune_history(hist, now, days):
 # ============================== основной цикл ==============================
 def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
             image_resolver=None, market=None):
-    """Обработка сделок. Возвращает (stats, per_source, waiting, fatal)."""
+    """Durable outbox: save the whole work queue before the first external delivery."""
+    if dry:
+        state, hist, deals = copy.deepcopy(state), copy.deepcopy(hist), copy.deepcopy(deals)
     stats, per_src, waiting, fatal = Counter(), defaultdict(Counter), [], False
-    save_state = save_state or (lambda s: None)
-    save_hist = save_hist or (lambda h: None)
-
-    pending = state["pending"]
-    state["pending"] = {}
-    known = {(d["id"], d["price"]) for d in deals}
-    for d in pending.values():          # отложенные лимитом в прошлый запуск (новый запуск мог получить 304)
-        if (d["id"], d["price"]) not in known:
-            deals.append(d)
+    save_state = (lambda s: None) if dry else (save_state or (lambda s: None))
+    save_hist = (lambda h: None) if dry else (save_hist or (lambda h: None))
+    state.setdefault('processed', {})
+    state.setdefault('posted', {})
+    state.setdefault('review', [])
+    assessments = state.setdefault('assessment_cache', {})
+    deals = offer_queue.merge_latest(deals, state.setdefault('pending', {}))
+    deals.sort(key=lambda d: (d['cat'] in ('laptop', 'prebuilt'),
+                             not (d.get('original') and d.get('price') and d['price'] < .15 * d['original']),
+                             -(d.get('published_ts') or 0)))
+    pending = {offer_queue.pkey(d): d for d in deals}
+    state['pending'] = pending
+    for d in deals:
+        q = d.setdefault('_queue', {'status': 'queued', 'attempts': 0, 'retry_at': 0})
+        rev = offer_queue.revision(d, cfg, RULES_VERSION, PARSER_VERSION)
+        if q.get('revision') != rev:
+            q.update(revision=rev, retry_at=0)
+        if q.get('status') == 'sending':
+            # The former process may have delivered it; retain an explicit uncertainty state.
+            q.update(status='delivery_unknown', retry_at=max(q.get('retry_at', 0), now + 60))
+        elif q.get('status') == 'processing':
+            q['status'] = 'queued'
+        offer_queue.price_event(d, state, now)
+    save_state(state)
     if market:
         for d in deals:
             market.add(d)
+        market.prepare(deals)
+    link_remaining = 60.0
 
-    # Components, peripherals and Pixel first; laptops/prebuilts use the remaining slots.
-    deals.sort(key=lambda d: (d["cat"] in ("laptop", "prebuilt"), -(d["published_ts"] or 0)))
-    transient_fails = 0
-    link_deadline = time.monotonic() + 60
+    def defer(d, key, reason, delay=120, status='queued'):
+        d['_queue'].update(status=status, reason=reason, retry_at=now + delay)
+        pending[key] = d
+        stats['ждут'] += 1
+        per_src[d['source_id']]['ждут'] += 1
+        price = fmt_price(d['price']) if d.get('price') is not None else 'цена уточняется'
+        waiting.append(f"  • [{d['cat']}] {d['name'][:55]} — {price} ({d['source']}): {reason}")
 
     for d in deals:
-        sid = d["source_id"]
-        pkey = f"{d['id']}@{d['price']}"           # смена цены у той же записи = новая оценка
-        if pkey in state["processed"]:
-            if d["trust"] == "merchant" and d["price"] is not None and d["cat"] not in ("other", "review"):
-                add_sample(hist.setdefault(hist_key(d), []), d, now)
-            stats["уже обработаны"] += 1
+        sid, key = d['source_id'], offer_queue.pkey(d)
+        q = d['_queue']
+        if q.get('retry_at', 0) > now:
             continue
-        if d["cat"] == "review":
-            state["review"].append({"title": d["title"], "url": d["url"], "source": d["source"]})
-            state["processed"][pkey] = now
-            stats["неизвестная категория (в очередь проверки)"] += 1
-            per_src[sid]["очередь проверки"] += 1
+        q['status'] = 'processing'
+        # Ambiguous feed prices get a chance to be resolved by the exact store page.
+        if d['price'] is None and market:
+            for raw in [d.get('url'), *d.get('store_candidates', [])]:
+                url = market_prices.canonical_url(raw)
+                market.verify(raw, force_refresh=True)
+                source = market.raw_verified.get(url)
+                if (source and source.get('price') is not None and
+                        (d.get('price_kind', 'regular') == 'regular' or
+                         (source.get('product_meta', {}).get('coupon', {}).get('verified') is True and
+                          source.get('product_meta', {}).get('coupon', {}).get('public') is True))):
+                    d.update(price=source['price'], product_meta=source.get('product_meta', {}),
+                             price_origin='store', cond=source['cond'], issue=None)
+                    pending.pop(key, None)
+                    key = offer_queue.pkey(d)
+                    pending[key] = d
+                    break
+        if d['cat'] in ('other', 'review') or d['price'] is None:
+            reason = 'категория требует повторной классификации' if d['cat'] in ('other', 'review') else 'цена требует проверки карточки'
+            assessments[offer_queue.listing_key(d)] = {'revision': q['revision'], 'rules_version': RULES_VERSION,
+                'parser_version': PARSER_VERSION, 'reason': reason, 'at': now, 'status': 'insufficient_data'}
+            if d.get('published_ts') and now - d['published_ts'] > cfg['max_age_h'] * 3600:
+                pending.pop(key, None)
+            else:
+                defer(d, key, reason, 300)
             continue
-        if d["cat"] == "other":
-            state["processed"][pkey] = now
-            stats["не комплектующие"] += 1
-            per_src[sid]["не комплектующие"] += 1
-            continue
-        if d["price"] is None:
-            state["processed"][pkey] = now
-            stats["цена не определена"] += 1
-            per_src[sid][f"цена: {d['issue']}"] += 1
-            continue
-
         samples = hist.setdefault(hist_key(d), [])
-        stats_h = hist_stats(samples, now, cfg["hist_days"],
-                             exclude_pid=None if d["trust"] == "merchant" else d["id"])
+        stats_h = hist_stats(samples, now, cfg['hist_days'], exclude_pid=None if d['trust'] == 'merchant' else d['id'])
         ok, info = assess(d, stats_h, cfg, now)
-        if market and not ok and not info["final"]:
-            evidence, reason = market.compare(d, *cfg["rules"].get(d["cat"], DEFAULT_RULE))
+        if offer_queue.history_eligible(d, now, cfg['max_age_h']):
+            add_sample(samples, d, now)
+        per_src[sid]['оценено'] += 1
+        verified = None
+        needs_confirmation = info['priority_verification'] or d.get('price_kind') in ('coupon', 'code')
+        if market and not info['final'] and needs_confirmation:
+            verified = market.verify_offer(d, force_refresh=True)
+            if not verified:
+                ok = False
+                info['reason'] = 'приоритетная проверка: текущая итоговая цена или условия ещё не подтверждены'
+            elif info['priority_verification'] and info['claimed'] and not info['claim_bad']:
+                min_pct, min_sav = cfg['rules'].get(d['cat'], DEFAULT_RULE)
+                ok = info['pct'] >= min_pct and info['sav'] >= min_sav
+                if ok:
+                    info['verified_offer'] = verified
+            elif ok:
+                info['verified_offer'] = verified
+        if market and not ok and not info['final']:
+            evidence, reason = market.compare(d, *cfg['rules'].get(d['cat'], DEFAULT_RULE))
             if evidence:
                 ok, info = assess(d, stats_h, cfg, now, evidence)
-                d["url"] = evidence["candidate_url"]
+                info['verified_offer'] = {'url': evidence['candidate_url']}
             else:
-                info["reason"] += "; сравнение магазинов: " + reason
-        add_sample(samples, d, now)
-        per_src[sid]["оценено"] += 1
-
+                info['reason'] = (info['reason'] + '; сравнение магазинов: ' + reason).strip('; ')
+        info['status'] = 'discount_confirmed' if ok else info['status']
+        assessments[offer_queue.listing_key(d)] = {'revision': q['revision'], 'rules_version': RULES_VERSION,
+            'parser_version': PARSER_VERSION, 'reason': info['reason'], 'status': info['status'], 'at': now}
         dk = dup_key(d)
-        if ok and now - state["posted"].get(dk, 0) < cfg["dup_hours"] * 3600:
-            state["processed"][pkey] = now
-            stats["дубль за окно"] += 1
-            per_src[sid]["дубли"] += 1
+        posted_at = state['posted'].get(dk, 0)
+        if ok and now - posted_at < cfg['dup_hours'] * 3600 and d.get('_rebound_at', 0) <= posted_at:
+            pending.pop(key, None)
+            stats['дубль за окно'] += 1
             continue
-
         if not ok:
-            if info["final"]:
-                state["processed"][pkey] = now
-                stats["отклонено окончательно"] += 1
-                per_src[sid][f"откл.: {info['reason']}"] += 1
+            if info['final']:
+                q.update(status='failed_permanently', reason=info['reason'])
+                pending.pop(key, None)
+                stats['отклонено окончательно'] += 1
             else:
-                if market and market_prices.identity(d):
-                    state["pending"][pkey] = d
-                stats["ждут"] += 1
-                per_src[sid]["ждут"] += 1
-                waiting.append(f"  • [{d['cat']}] {d['name'][:55]} — {fmt_price(d['price'])} ({d['source']}): {info['reason']}")
+                defer(d, key, info['reason'], status='priority_verification' if info['priority_verification'] else 'queued')
             continue
-
-        if stats["опубликовано"] >= cfg["max_posts"]:
-            state["pending"][pkey] = d             # не теряем: уйдёт в следующем запуске, пока свежее
-            stats["отложено лимитом"] += 1
+        if stats['опубликовано'] >= cfg['max_posts']:
+            q.update(status='queued', reason='лимит публикаций')
+            stats['отложено лимитом'] += 1
             continue
-        if not safe_url(d["url"]):
-            state["processed"][pkey] = now
-            stats["нет корректной ссылки"] += 1
-            continue
-
-        direct = store_links.resolve_store_url(
-            d["url"], d.get("store_candidates", []), d.get("discuss", ""),
-            budget=max(0, min(15, link_deadline - time.monotonic())))
+        # Pin a verified offer; a secondary RSS link must never replace it.
+        direct = (info.get('verified_offer') or {}).get('url')
         if not direct:
-            # Retry on the next run, including when the feed returns 304.
-            state["pending"][pkey] = d
-            stats["ждут прямой ссылки магазина"] += 1
-            per_src[sid]["нет прямой ссылки магазина"] += 1
+            started = time.monotonic()
+            direct = store_links.resolve_store_url(d['url'], d.get('store_candidates', []), d.get('discuss', ''),
+                                                   budget=max(0, min(15, link_remaining)))
+            link_remaining -= time.monotonic() - started
+        if not direct:
+            defer(d, key, 'ждут прямой ссылки магазина')
+            stats['ждут прямой ссылки магазина'] += 1
             continue
-        d["url"] = direct
-
-        photo = product_images.image_url(d.get("image_url"))
-        d["image_url"] = photo
-
+        d['url'] = direct
         msg = build_message(d, info)
         if dry:
-            log(msg + "\nВ магазин: " + direct + ("\nФото: " + photo if photo else "") + "\n" + "=" * 40)
-            stats["опубликовано"] += 1
+            log(msg + '\nВ магазин: ' + direct + '\n' + '=' * 40)
+            stats['опубликовано'] += 1
             continue
+        q.update(status='sending', attempts=q.get('attempts', 0) + 1, retry_at=now + 60)
+        save_state(state)
         try:
-            send(msg, store_url=direct, photo_url=photo)
+            send(msg, store_url=direct, photo_url=product_images.image_url(d.get('image_url')))
         except TelegramError as ex:
-            if ex.ambiguous:      # возможно доставлено: помечаем, чтобы не плодить дубли
-                log(f"[WARN] {ex}; помечаю как отправленное (риск пропуска вместо дубля)")
-                state["processed"][pkey], state["posted"][dk] = now, now
-                save_state(state)
-                stats["неоднозначно (возможно доставлено)"] += 1
-                continue
-            log(f"[ERROR] отправка не удалась: {redact(ex)}")
-            stats["ошибки отправки"] += 1
+            log(f'[ERROR] отправка не удалась: {redact(ex)}')
+            stats['ошибки отправки'] += 1
+            if ex.permanent and not ex.fatal and not ex.ambiguous:
+                q.update(status='failed_permanently', reason=str(ex))
+                pending.pop(key, None)
+            else:
+                defer(d, key, str(ex), delay=max(getattr(ex, 'retry_after', 0), min(3600, 60 * 2 ** min(q['attempts'] - 1, 5))),
+                      status='delivery_unknown' if ex.ambiguous else 'queued')
+            save_state(state)
             if ex.fatal:
                 fatal = True
                 break
-            if ex.permanent:  # ошибка именно этого сообщения: не зацикливаемся
-                state["processed"][pkey] = now
-                save_state(state)
-                continue
-            transient_fails += 1
-            if transient_fails >= 2:
-                log("[ERROR] Telegram недоступен, прерываю отправку до следующего запуска")
+            if stats['ошибки отправки'] >= 2:
                 break
             continue
-        # подтверждённый успех -> checkpoint сразу
-        state["processed"][pkey], state["posted"][dk] = now, now
+        q.update(status='delivered', delivered_at=now)
+        state['processed'][key], state['posted'][dk] = now, now
+        pending.pop(key, None)
         save_state(state)
-        stats["опубликовано"] += 1
-        per_src[sid]["опубликовано"] += 1
-
+        stats['опубликовано'] += 1
+        per_src[sid]['опубликовано'] += 1
+    save_state(state)
     save_hist(hist)
     return stats, per_src, waiting, fatal
 
@@ -764,7 +838,10 @@ def main(argv=None):
         return 2
     print(f"Режим: {'DRY RUN (без отправки и сохранения)' if dry else 'боевой'}")
 
-    state, hist = load_state(), _load(DATA / HIST_F, {})
+    checkpoint_store = checkpoints.Store(DATA)
+    state, hist = checkpoint_store.load()
+    for key, value in (("processed", {}), ("posted", {}), ("pending", {}), ("sources", {}), ("review", [])):
+        state.setdefault(key, value)
     hist = prune_history(hist, now, cfg["hist_days"])
     srcs = S.active_sources()
     print(f"Активных источников: {len(srcs)}")
@@ -799,8 +876,8 @@ def main(argv=None):
         uniq.setdefault((d["id"], d["price"]), d)
     deals = list(uniq.values())
 
-    ss = (lambda s: None) if dry else (lambda s: (trim_state(s, now, cfg), atomic_write_json(DATA / STATE_F, s)))
-    sh = (lambda h: None) if dry else (lambda h: atomic_write_json(DATA / HIST_F, h))
+    ss = (lambda s: None) if dry else (lambda s: (trim_state(s, now, cfg), checkpoint_store.save(s, hist)))
+    sh = lambda h: None  # Both parts are already committed by the same atomic checkpoint.
     stats, per_src, waiting, fatal = Counter(), {}, [], False
     def verify_product(url):
         entry = S.fetch_market_product(url)

@@ -16,6 +16,8 @@ MERCHANTS = (
     "westerndigital.com", "crucial.com", "corsair.com", "logitech.com", "monoprice.com",
     "msi.com", "store.google.com", "kingston.com", "sandisk.com", "steelseries.com",
     "razer.com", "hyperx.com", "elgato.com", "audio-technica.com", "shure.com",
+    "sweetwater.com", "guitarcenter.com", "musiciansfriend.com", "zzounds.com",
+    "americanmusical.com", "perfectcircuit.com", "roland.com", "korg.com", "moogmusic.com", "elektron.se",
 )
 AGGREGATORS = ("slickdeals.net", "techbargains.com", "bensbargains.net", "9to5toys.com",
                "pcworld.com", "tomshardware.com", "dealnews.com", "reddit.com")
@@ -54,6 +56,15 @@ def merchant_url(value):
     if on_domain(url, ("newegg.com",)):
         if not re.search(r"/p/[A-Z0-9]+(?:/|$)", p.path, re.I) and not parse_qs(p.query).get("Item"):
             return None
+    music_routes = {"sweetwater.com": r"/store/detail/", "guitarcenter.com": r"\.gc$",
+                    "musiciansfriend.com": r"/(?:keyboards-midi|pro-audio|accessories|guitars|bass|drums-percussion)/",
+                    "zzounds.com": r"/item--", "americanmusical.com": r"/p/",
+                    "perfectcircuit.com": r"\.html$"}
+    for domain, pattern in music_routes.items():
+        if on_domain(url, (domain,)):
+            if not re.search(pattern, p.path, re.I):
+                return None
+            return urlunsplit((p.scheme, p.netloc, p.path, p.query, ""))
     if p.path.rstrip("/") == "" or re.search(r"/(?:search|cart|login|signin|stores?)(?:[/.]|$)", p.path, re.I):
         return None
     return urlunsplit((p.scheme, p.netloc, p.path, p.query, ""))
@@ -184,6 +195,9 @@ def follow(url, session, deadline):
 
 def resolve_store_url(url, candidates=(), discuss_url="", session=requests, budget=15):
     deadline = time.monotonic() + budget
+    direct = unwrap(url)
+    if direct:
+        return direct
     queue = list(dict.fromkeys([*candidates, url, discuss_url]))
     # Prefer links already in the RSS item over fetching its discussion page.
     for value in queue:
