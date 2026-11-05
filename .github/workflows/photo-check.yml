@@ -1,0 +1,54 @@
+name: Product photo delivery check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deals-photo-check
+  cancel-in-progress: false
+
+jobs:
+  photo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Unit tests
+        run: python -m pytest -q
+      - name: Send one labelled product photo test
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import html
+          import bot
+          import checkpoints
+          import product_images
+          import store_links
+
+          state, _ = checkpoints.Store('data').load()
+          for deal in state.get('pending', {}).values():
+              direct = store_links.merchant_url(deal.get('url'))
+              image = product_images.image_url(deal.get('image_url'))
+              if not direct or not image:
+                  continue
+              text = '🧪 <b>Проверка отправки фото товара</b>\n' + html.escape(deal['name'][:150])
+              text += '\nТест доставки изображения; это не публикация скидки.'
+              result = bot.tg_send(text, store_url=direct, photo_url=image)
+              receipt = result.get('result', {})
+              if not receipt.get('photo'):
+                  raise RuntimeError('Telegram delivered text fallback; photo delivery is NOT confirmed')
+              print('PHOTO_DELIVERY_CONFIRMED message_id=' + str(receipt['message_id']))
+              break
+          else:
+              raise RuntimeError('No exact merchant product with an image in the current queue')
+          PY
