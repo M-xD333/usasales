@@ -9,6 +9,7 @@ from urllib.parse import urljoin, urlsplit
 
 import store_links
 import product_images
+import product_weight
 import market_prices
 
 
@@ -139,6 +140,7 @@ def offer_meta(product, offer, base):
             except (TypeError, ValueError):
                 pass
     return {"brand": brand if isinstance(brand, str) else "", "mpn": mpn,
+            "weight_kg": product_weight.from_product(product),
             "gtins": [str(product[k]) for k in ("gtin", "gtin8", "gtin12", "gtin13", "gtin14") if product.get(k)],
             "currency": offer.get("priceCurrency"),
             "market": "US" if not re.search(r"/(?:uk|gb|de|fr|ca|au|jp|en-gb|en-ca)(?:/|$)", urlsplit(base).path, re.I) else None,
@@ -219,7 +221,8 @@ def corsair_catalog(doc, base, schema_entries):
                                      "gtins": [], "currency": final.get("currency"),
                                      "in_stock": True, "condition": "New", "market": "US",
                                      "shipping": 0 if item.get("free_shipping") is True else None,
-                                     "seller": "Corsair"}
+                                     "seller": "Corsair",
+                                     "weight_kg": next((s.get('product_meta', {}).get('weight_kg') for s in schema_entries if s['url'] == url), None)}
                 out.append(e)
         return out
     return None

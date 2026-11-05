@@ -19,6 +19,7 @@ import requests
 import sources as S
 import store_links
 import product_images
+import product_weight
 import market_prices
 import market_search
 import checkpoints
@@ -338,6 +339,7 @@ def make_deal(entry, source, now):
         "product_meta": entry.get("product_meta", {}) if source.type == "store" else {},
         "price_origin": "store" if source.type == "store" else "feed",
         "price_components": pi.get("price_components", {}),
+        "weight_kg": product_weight.kilograms((entry.get('product_meta') or {}).get('weight_kg'), 'kg') if source.type == 'store' else None,
         "image_url": product_images.image_url(entry.get("image_url")),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
         "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
@@ -477,6 +479,8 @@ def build_message(d, info):
         label = "MSRP" if d["original_kind"] == "MSRP" else "было"
         price_line += f" ({label} {fmt_price(info['claimed'])}, −{info['pct']:.0f}%)"
     lines.append(price_line)
+    weight = product_weight.display(d.get('weight_kg') or (d.get('product_meta') or {}).get('weight_kg'))
+    lines.append('⚖️ Вес: ' + weight)
     direct = store_links.merchant_url(d.get("url"))
     if direct:
         lines.append(f'🛒 <a href="{e(direct, quote=True)}">Открыть товар в магазине</a>')
@@ -511,7 +515,7 @@ def build_message(d, info):
     name = e(d['name'][:150])
     direct = store_links.merchant_url(d.get('url'))
     link = f'\n🛒 <a href="{e(direct, quote=True)}">Открыть товар в магазине</a>' if direct and len(direct) < 2000 else ''
-    return f"📦 <b>{name}</b>\n💰 Цена: <b>{fmt_price(d['price'])}</b>\nУсловие: {e(d['cond'])}" + link
+    return f"📦 <b>{name}</b>\n💰 Цена: <b>{fmt_price(d['price'])}</b>\n⚖️ Вес: {weight}\nУсловие: {e(d['cond'])}" + link
 
 
 # ============================== Telegram ==============================
@@ -655,7 +659,7 @@ def prune_history(hist, now, days):
 
 # ============================== основной цикл ==============================
 def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
-            image_resolver=None, market=None):
+            image_resolver=None, market=None, details_resolver=None):
     """Durable outbox: save the whole work queue before the first external delivery."""
     if dry:
         state, hist, deals = copy.deepcopy(state), copy.deepcopy(hist), copy.deepcopy(deals)
@@ -789,6 +793,12 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats['ждут прямой ссылки магазина'] += 1
             continue
         d['url'] = direct
+        if not dry and details_resolver and (not d.get('weight_kg') or not d.get('image_url')):
+            details = details_resolver(direct) or {}
+            if not d.get('weight_kg'):
+                d['weight_kg'] = product_weight.kilograms(details.get('weight_kg'), 'kg')
+            if not d.get('image_url'):
+                d['image_url'] = product_images.image_url(details.get('image_url'))
         if not dry and image_resolver and not product_images.image_url(d.get('image_url')):
             d['image_url'] = image_resolver(direct)
         msg = build_message(d, info)
@@ -930,7 +940,7 @@ def main(argv=None):
                                       discoverer=market_search.discover)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               market=market, image_resolver=product_images.from_product_page)
+                                               market=market, details_resolver=product_images.from_product_details)
     finally:
         ss(state)
         sh(hist)

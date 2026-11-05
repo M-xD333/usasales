@@ -9,6 +9,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import requests
 import store_links
 import merchant_http
+import product_weight
 
 
 def image_url(value, base=""):
@@ -108,7 +109,7 @@ def from_feed(entry, markup, base):
     return extract_image(markup, base)
 
 
-def from_product_page(url, session=requests):
+def from_product_details(url, session=requests):
     if not store_links.merchant_url(url):
         return None
     # Do not follow redirects to arbitrary hosts; this is a best-effort metadata lookup.
@@ -125,9 +126,16 @@ def from_product_page(url, session=requests):
                 size += len(chunk)
                 if size >= 1_000_000:
                     break
-            return extract_image(b"".join(chunks).decode(r.encoding or "utf-8", errors="replace"),
-                                 url, product_page=True)
+            markup = b"".join(chunks).decode(r.encoding or "utf-8", errors="replace")
+            final_url = r.url if isinstance(r.url, str) else url
+            return {'image_url': extract_image(markup, final_url, product_page=True),
+                    'weight_kg': product_weight.from_markup(markup, final_url)}
         finally:
             r.close()
     except (requests.RequestException, ValueError):
         return None
+
+
+def from_product_page(url, session=requests):
+    details = from_product_details(url, session=session)
+    return details.get('image_url') if details else None
