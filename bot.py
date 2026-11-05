@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """US deals -> Telegram (текстовые публикации, запуск из GitHub Actions)."""
 import html
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import copy
 import json
 import os
@@ -903,7 +905,7 @@ def main(argv=None):
 def smoke():
     """Проверка всех источников (включая отключённые): статус, тип, число записей, свежесть."""
     print("===== SMOKE TEST ИСТОЧНИКОВ (состояние и Telegram не затрагиваются) =====")
-    print("Время теста (UTC):", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+    print("Время теста (Ташкент, UTC+5):", datetime.now(ZoneInfo("Asia/Tashkent")).strftime("%Y-%m-%d %H:%M:%S"))
     for s in S.SOURCES:
         if s.type == "reddit":
             try:

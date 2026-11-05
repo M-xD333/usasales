@@ -39,6 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     # GitHub hosted runner limiti — 6 soat (360 daq). Tsikl 330 daq, qolgani push uchun.
     timeout-minutes: 350
+    env:
+      TZ: Asia/Tashkent
     steps:
       - uses: actions/checkout@v5
 
@@ -119,7 +121,7 @@ jobs:
           failures=0
           while : ; do
             i=$(( i + 1 ))
-            echo "::group::iteration $i — $(date -u '+%Y-%m-%d %H:%M:%S') UTC"
+            echo "::group::iteration $i — $(TZ=Asia/Tashkent date '+%Y-%m-%d %H:%M:%S') Ташкент (UTC+5)"
             # Fail immediately on corrupt code, including updates fetched mid-run.
             python -m compileall -q -x '/\.git/' .
             if timeout --signal=TERM --kill-after=30s 10m python bot.py $SMOKE_FLAG; then
