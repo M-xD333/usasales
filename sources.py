@@ -168,6 +168,7 @@ class FetchResult:
     etag: str = ""
     last_modified: str = ""
     bozo: bool = False
+    next_poll: float = 0
 
 
 def _get(url, headers, session, attempts=2, **kw):
@@ -263,7 +264,7 @@ def fetch_store(source, cond=None, session=requests):
     state = cond or {}
     interval = 1800 if state.get("errors", 0) else 900
     if time.time() - state.get("last_attempt", 0) < interval:
-        res.status, res.not_modified = 304, True
+        res.not_modified, res.next_poll = True, state.get("last_attempt", 0) + interval
         return res
     try:
         headers = {"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"}

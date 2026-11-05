@@ -313,8 +313,26 @@ class MarketPrices:
             old = self.state["searched"].get(key)
             extreme = deal.get("original") and deal.get("price") and deal["price"] < .15 * deal["original"]
             return (old is not None, old.get("at", 0) if old else 0, not extreme, key)
-        for _, deal in sorted(candidates.items(), key=rank):
-            self._search(deal)
+        # Rotate manufacturers before taking another product from a large catalog.
+        groups = {}
+        for key, deal in sorted(candidates.items(), key=rank):
+            brand = normalize((deal.get('product_meta') or {}).get('brand')) or shop(deal.get('url')) or deal.get('source_id', 'unknown')
+            groups.setdefault(brand, []).append((key, deal))
+        served = self.state.setdefault('brand_searched', {})
+        round_order = sorted(groups, key=lambda brand: (served.get(brand, 0), brand))
+        while groups and self.search_remaining > 0 and time.monotonic() < self.deadline:
+            for brand in round_order:
+                if brand not in groups:
+                    continue
+                key, deal = groups[brand].pop(0)
+                before = self.search_remaining
+                self._search(deal)
+                if self.search_remaining < before:
+                    served[brand] = self.now
+                if not groups[brand]:
+                    del groups[brand]
+                if self.search_remaining <= 0 or time.monotonic() >= self.deadline:
+                    break
         self.prepared = True
 
     def compare(self, deal, min_pct, min_sav):

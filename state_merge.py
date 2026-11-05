@@ -33,6 +33,9 @@ def merge_state(remote, local):
     market['checked'] = dict(remote.get('market_prices',{}).get('checked',{}))
     for key, value in local.get('market_prices',{}).get('checked',{}).items():
         market['checked'][key] = max(value,market['checked'].get(key,value))
+    market['brand_searched'] = dict(remote.get('market_prices', {}).get('brand_searched', {}))
+    for key, value in local.get('market_prices', {}).get('brand_searched', {}).items():
+        market['brand_searched'][key] = max(value, market['brand_searched'].get(key, value))
     if remote.get('market_prices') or local.get('market_prices'):
         out['market_prices'] = market
     return C.validate_state(out)

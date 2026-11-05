@@ -71,18 +71,16 @@ class ImageExtraction(unittest.TestCase):
 
 @mock.patch.dict(os.environ, {"TG_BOT_TOKEN": "test-token", "TG_CHAT_ID": "test-chat"})
 class PhotoDelivery(unittest.TestCase):
-    def test_product_link_preview_replaces_photo_and_button(self):
+    def test_photo_delivery_keeps_product_link_without_button(self):
         session = mock.Mock()
         session.post.return_value = response()
         bot.tg_send("<b>SSD</b> $99", session=session, photo_url=IMAGE, store_url=STORE)
         call = session.post.call_args
-        self.assertTrue(call.args[0].endswith("/sendMessage"))
+        self.assertTrue(call.args[0].endswith("/sendPhoto"))
         data = call.kwargs["json"]
-        self.assertNotIn("photo", data)
+        self.assertEqual(data['photo'], IMAGE)
         self.assertNotIn("reply_markup", data)
-        self.assertIn(STORE, data["text"])
-        self.assertEqual(data["link_preview_options"], {"url": STORE, "is_disabled": False,
-                                                       "prefer_large_media": True, "show_above_text": False})
+        self.assertIn(STORE, data["caption"])
 
     def test_explicit_preview_uses_deal_not_first_reference(self):
         session = mock.Mock()
@@ -90,8 +88,8 @@ class PhotoDelivery(unittest.TestCase):
         bot.tg_send('Сравнение: <a href="https://www.amazon.com/dp/B012345678">Amazon</a>',
                     session=session, photo_url=IMAGE, store_url=STORE)
         self.assertEqual(session.post.call_count, 1)
-        self.assertTrue(session.post.call_args.args[0].endswith("/sendMessage"))
-        self.assertEqual(session.post.call_args.kwargs["json"]["link_preview_options"]["url"], STORE)
+        self.assertTrue(session.post.call_args.args[0].endswith("/sendPhoto"))
+        self.assertIn(STORE, session.post.call_args.kwargs['json']['caption'])
         self.assertNotIn("reply_markup", session.post.call_args.kwargs["json"])
 
     def test_photo_timeout_never_falls_back_or_resends(self):
@@ -110,11 +108,11 @@ class PhotoDelivery(unittest.TestCase):
         self.assertTrue(ctx.exception.fatal)
         self.assertEqual(session.post.call_count, 1)
 
-    def test_429_retries_text_with_same_preview(self):
+    def test_429_retries_same_photo(self):
         session = mock.Mock()
         session.post.side_effect = [response(429, {"parameters": {"retry_after": 2}}), response()]
         bot.tg_send("SSD", session=session, photo_url=IMAGE, sleep=lambda _: None)
-        self.assertTrue(all(c.args[0].endswith("/sendMessage") for c in session.post.call_args_list))
+        self.assertTrue(all(c.args[0].endswith("/sendPhoto") for c in session.post.call_args_list))
 
     def test_caption_limit_does_not_break_entities_or_emoji(self):
         caption = bot.photo_caption("<b>" + "📦&amp;" * 600 + "</b>")
@@ -144,3 +142,43 @@ class PhotoDelivery(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@mock.patch.dict(os.environ, {'TG_BOT_TOKEN':'test-token','TG_CHAT_ID':'test-chat'})
+class PhotoFixRegression(unittest.TestCase):
+    def test_rejected_remote_image_falls_back_to_text_once(self):
+        session=mock.Mock();session.post.side_effect=[response(400,{'description':'Bad Request: failed to get HTTP URL content'}),response()]
+        bot.tg_send('SSD $80',session=session,photo_url=IMAGE,store_url=STORE)
+        self.assertEqual(session.post.call_count,2)
+        self.assertTrue(session.post.call_args_list[0].args[0].endswith('/sendPhoto'))
+        self.assertTrue(session.post.call_args_list[1].args[0].endswith('/sendMessage'))
+        self.assertIn(STORE,session.post.call_args_list[1].kwargs['json']['text'])
+
+    def test_long_caption_preserves_clickable_store_link(self):
+        value=bot.photo_caption('<b>'+'📦&amp;'*1000+'</b>', STORE)
+        self.assertEqual(value['parse_mode'],'HTML')
+        self.assertIn('href="'+STORE+'"',value['caption'])
+        import html,re
+        plain=html.unescape(re.sub('<[^>]+>','',value['caption']))
+        self.assertLessEqual(len(plain.encode('utf-16-le')),2048)
+
+    def test_process_resolves_missing_photo_from_exact_page(self):
+        from test_regressions import approved,state,cfg,NOW
+        resolver=mock.Mock(return_value=IMAGE);send=mock.Mock()
+        bot.process([approved()],state(),{},NOW,cfg(),send,image_resolver=resolver)
+        resolver.assert_called_once_with('https://www.amazon.com/dp/B012345678')
+        self.assertEqual(send.call_args.kwargs['photo_url'],IMAGE)
+
+    def test_photo_server_error_retries_photo_without_text_duplicate(self):
+        session=mock.Mock();session.post.side_effect=[response(500),response()]
+        bot.tg_send('SSD',session=session,photo_url=IMAGE,sleep=lambda _:None)
+        self.assertEqual(session.post.call_count,2)
+        self.assertTrue(all(c.args[0].endswith('/sendPhoto') for c in session.post.call_args_list))
+
+
+class ConfirmedPhotoReceipt(unittest.TestCase):
+    def test_confirmed_telegram_photo_saved_in_checkpoint(self):
+        from test_regressions import approved,state,cfg,NOW
+        st=state();receipt={'ok':True,'result':{'message_id':321,'photo':[{'file_id':'photo'}]}}
+        bot.process([approved()],st,{},NOW,cfg(),mock.Mock(return_value=receipt))
+        self.assertEqual(st['last_delivery'],{'at':NOW,'kind':'photo','message_id':321})

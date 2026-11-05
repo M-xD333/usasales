@@ -373,3 +373,37 @@ class ProductionCheckpointRegression(unittest.TestCase):
             send.assert_called_once();self.assertFalse(restored['pending'])
             self.assertEqual(len(restored['assessment_cache']),1)
             self.assertEqual(len(restored['posted']),1)
+
+
+class BrandAndReportRegression(unittest.TestCase):
+    def test_large_brand_cannot_spend_all_four_search_slots(self):
+        deals=[];seen=[]
+        for brand,count in [('Corsair',30),('Samsung',2),('Crucial',2),('ASUS',2)]:
+            for i in range(count):
+                d=hardware('corsair.com',100);d['product_meta'].update(brand=brand,mpn=f'MODEL{i}')
+                deals.append(d)
+        market=M.MarketPrices({},NOW,discoverer=lambda d,**k:(seen.append(d['product_meta']['brand']) or {'requests':1}))
+        market.prepare(deals)
+        self.assertEqual(set(seen),{'Corsair','Samsung','Crucial','ASUS'})
+        self.assertEqual(len(seen),4)
+
+    def test_five_brands_rotate_across_cycles(self):
+        st={};seen=[];deals=[]
+        for brand in ['A','B','C','D','E']:
+            for i in range(5):
+                d=hardware('corsair.com',100);d['product_meta'].update(brand=brand,mpn=f'MODEL{i}')
+                deals.append(d)
+        def search(d,**kw):seen.append(d['product_meta']['brand']);return {'requests':1}
+        M.MarketPrices(st,NOW,discoverer=search).prepare(deals)
+        M.MarketPrices(st,NOW+120,discoverer=search).prepare(deals)
+        self.assertEqual(seen[4],'E')
+
+    def test_report_diversifies_sources_and_labels_local_poll_pause(self):
+        result=S.FetchResult(S.Source('direct','Direct','https://www.corsair.com',type='store'),not_modified=True,next_poll=NOW+900)
+        lines=[f'  • [ram] Item {i} (Corsair): awaiting' for i in range(20)]
+        lines += ['  • [ssd] Other (Samsung): awaiting','  • [ssd] Other (Crucial): awaiting']
+        with patch('builtins.print') as output:
+            bot.print_report([result],{}, bot.Counter(),lines,{})
+        text=' '.join(str(c) for c in output.call_args_list)
+        self.assertIn('(Samsung)',text);self.assertIn('(Crucial)',text)
+        self.assertIn('пауза опроса до',text);self.assertNotIn('304',text)

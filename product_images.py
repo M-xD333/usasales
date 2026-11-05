@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import requests
 import store_links
+import merchant_http
 
 
 def image_url(value, base=""):
@@ -112,8 +113,9 @@ def from_product_page(url, session=requests):
         return None
     # Do not follow redirects to arbitrary hosts; this is a best-effort metadata lookup.
     try:
-        r = session.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(3, 5),
-                        stream=True, allow_redirects=False)
+        r = merchant_http.get(url, session=session, headers={"User-Agent": "Mozilla/5.0"}, timeout=(3, 5), stream=True)
+        if r is None:
+            return None
         try:
             if r.status_code != 200:
                 return None

@@ -527,10 +527,14 @@ def redact(text):
     return str(text).replace(tok, "***") if tok else str(text)
 
 
-def photo_caption(text):
+def photo_caption(text, store_url=None):
     plain = html.unescape(re.sub(r"<[^>]*>", "", text))
     if len(plain.encode("utf-16-le")) <= 1024 * 2:
         return {"caption": text, "parse_mode": "HTML"}
+    if store_url:
+        # Keep a clickable purchase link even when the full message exceeds a caption.
+        lead = plain.encode('utf-16-le')[:1100].decode('utf-16-le', errors='ignore')
+        return {'caption': html.escape(lead) + '…\n🛒 <a href="' + html.escape(store_url, quote=True) + '">Открыть товар в магазине</a>', 'parse_mode': 'HTML'}
     # Rare long captions: preserve essential leading information without cutting HTML tags.
     caption = plain.encode("utf-16-le")[:1023 * 2].decode("utf-16-le", errors="ignore") + "…"
     return {"caption": caption}
@@ -538,7 +542,7 @@ def photo_caption(text):
 
 def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=None):
     """Отправка с retry. Остаточный риск: если ответ потерян после доставки (read timeout),
-    сообщение помечается ambiguous и НЕ отправляется повторно (лучше пропуск, чем дубль)."""
+    отправка получает delivery_unknown; очередь повторяет её позже, дубль возможен."""
     token, chat = os.environ["TG_BOT_TOKEN"], os.environ["TG_CHAT_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     preview = {"is_disabled": False}
@@ -552,6 +556,10 @@ def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=
         # Select the deal, even when comparison references or channel links occur first.
         preview.update(url=direct, prefer_large_media=True, show_above_text=False)
     payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "link_preview_options": preview}
+    photo = product_images.image_url(photo_url)
+    if photo:
+        url = f"https://api.telegram.org/bot{token}/sendPhoto"
+        payload = {"chat_id": chat, "photo": photo, **photo_caption(text, store_url)}
     last = "неизвестная ошибка"
     for attempt in range(4):
         try:
@@ -569,8 +577,15 @@ def tg_send(text, session=requests, sleep=time.sleep, store_url=None, photo_url=
         except ValueError:
             data = {}
         if r.status_code == 200 and data.get("ok"):
+            print('[Telegram] ' + ('фото доставлено' if photo else 'текст отправлен с предпросмотром ссылки'))
             return data
         desc = str(data.get("description", ""))[:200]
+        if photo and r.status_code == 400 and any(part in desc.lower() for part in
+                ('failed to get http', 'wrong type of the web page content', 'image_process_failed',
+                 'photo_invalid', 'photo_content', 'wrong file identifier', 'webpage_media_empty',
+                 'wrong remote file', 'file is too big', 'photo_invalid_dimensions')):
+            print('[Telegram] фото отклонено: ' + redact(desc) + '; отправляем текст с прямой ссылкой')
+            return tg_send(text, session=session, sleep=sleep, store_url=store_url)
         if r.status_code == 429:
             wait = max(1, int(data.get("parameters", {}).get("retry_after", 5))) + 1
             if wait > 60:
@@ -774,6 +789,8 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats['ждут прямой ссылки магазина'] += 1
             continue
         d['url'] = direct
+        if not dry and image_resolver and not product_images.image_url(d.get('image_url')):
+            d['image_url'] = image_resolver(direct)
         msg = build_message(d, info)
         if dry:
             log(msg + '\nВ магазин: ' + direct + '\n' + '=' * 40)
@@ -782,7 +799,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         q.update(status='sending', attempts=q.get('attempts', 0) + 1, retry_at=now + 60)
         save_state(state)
         try:
-            send(msg, store_url=direct, photo_url=product_images.image_url(d.get('image_url')))
+            receipt = send(msg, store_url=direct, photo_url=product_images.image_url(d.get('image_url')))
         except TelegramError as ex:
             log(f'[ERROR] отправка не удалась: {redact(ex)}')
             stats['ошибки отправки'] += 1
@@ -799,6 +816,11 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             if stats['ошибки отправки'] >= 2:
                 break
             continue
+        if isinstance(receipt, dict) and isinstance(receipt.get('result'), dict):
+            result = receipt['result']
+            kind = 'photo' if result.get('photo') else 'text'
+            state['last_delivery'] = {'at': now, 'kind': kind, 'message_id': result.get('message_id')}
+            stats['доставлено с фото' if kind == 'photo' else 'доставлено текстом'] += 1
         q.update(status='delivered', delivered_at=now)
         state['processed'][key], state['posted'][dk] = now, now
         pending.pop(key, None)
@@ -816,7 +838,9 @@ def print_report(results, per_src, stats, waiting, hist):
         s = r.source
         newest = max((e["published_ts"] for e in r.entries if e["published_ts"]), default=None)
         age = f"{(time.time() - newest) / 3600:.1f} ч" if newest else "—"
-        status = "304 (без изменений)" if r.not_modified else (f"HTTP {r.status}" if r.status else "нет ответа")
+        status = ("пауза опроса до " + datetime.fromtimestamp(r.next_poll, ZoneInfo('Asia/Tashkent')).strftime('%H:%M:%S') + ' Ташкент'
+                  if r.next_poll else "304 (лента без изменений)" if r.not_modified
+                  else f"HTTP {r.status}" if r.status else "нет ответа")
         err = f" | ОШИБКА: {redact(r.error)}" if r.error else ""
         c = per_src.get(s.id, Counter())
         details = ", ".join(f"{k} {v}" for k, v in c.items())
@@ -828,8 +852,20 @@ def print_report(results, per_src, stats, waiting, hist):
         print(f"{k}: {v}")
     print(f"товаров с историей цен: {len(hist)}")
     if waiting:
-        print("\nНе опубликованы — причины автоматической проверки (первые 15):")
-        print("\n".join(waiting[:15]))
+        print(f"\nНе опубликованы — причины автоматической проверки (до 15 примеров из {len(waiting)}, чередуем источники):")
+        groups = {}
+        for line in waiting:
+            match = re.search(r'\(([^()]*)\):', line)
+            groups.setdefault(match.group(1) if match else 'other', []).append(line)
+        examples = []
+        while groups and len(examples) < 15:
+            for source in list(groups):
+                examples.append(groups[source].pop(0))
+                if not groups[source]:
+                    del groups[source]
+                if len(examples) >= 15:
+                    break
+        print("\n".join(examples))
 
 
 def main(argv=None):
@@ -894,7 +930,7 @@ def main(argv=None):
                                       discoverer=market_search.discover)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               market=market)
+                                               market=market, image_resolver=product_images.from_product_page)
     finally:
         ss(state)
         sh(hist)
