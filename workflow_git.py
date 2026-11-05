@@ -191,18 +191,28 @@ class RunnerGit:
                     if path.is_symlink() or path.stat().st_size > 20_000_000:
                         raise ValueError("invalid checkpoint file: " + name)
                     value = path.read_bytes()
-                    parsed = json.loads(value)
-                    if not isinstance(parsed, dict):
-                        raise ValueError("invalid checkpoint JSON: " + name)
-                    if name == "state.json" and not all(isinstance(parsed.get(k), dict) for k in ("posted", "processed", "pending")):
-                        raise ValueError("invalid state checkpoint structure")
                     recovered["data/" + name] = value
-            if 'data/' + checkpoints.FILE in recovered:
-                bundle = checkpoints.validate_bundle(json.loads(recovered['data/' + checkpoints.FILE]))
+            bundle = None
+            has_bundle = any('data/' + name in recovered for name in (checkpoints.FILE, checkpoints.BACKUP))
+            for name in (checkpoints.FILE, checkpoints.BACKUP):
+                if 'data/' + name not in recovered:
+                    continue
+                try:
+                    candidate = checkpoints.validate_bundle(json.loads(recovered['data/' + name]))
+                    if bundle is None:
+                        bundle = candidate
+                except (ValueError, TypeError):
+                    recovered.pop('data/' + name)
+            if has_bundle and bundle is None:
+                raise checkpoints.CheckpointError('no valid atomic recovery generation')
+            if bundle is not None:
+                recovered['data/' + checkpoints.FILE] = json.dumps(bundle, ensure_ascii=False).encode()
                 recovered['data/state.json'] = json.dumps(bundle['state'], ensure_ascii=False).encode()
                 recovered['data/history.json'] = json.dumps(bundle['history'], ensure_ascii=False).encode()
             if not {"data/state.json", "data/history.json"} <= recovered.keys():
                 raise ValueError("incomplete recovery checkpoint; stopping before publication")
+            checkpoints.validate_state(json.loads(recovered['data/state.json']))
+            checkpoints.validate_history(json.loads(recovered['data/history.json']))
             local = self.snapshot()
             if 'data/state.json' in local:
                 recovered['data/state.json'] = json.dumps(state_merge.merge_state(

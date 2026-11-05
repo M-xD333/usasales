@@ -202,6 +202,9 @@ class RunnerSyncTests(unittest.TestCase):
             if 'download' in args:
                 target=Path(args[args.index('--dir')+1])
                 (target/'checkpoint.json').write_text(json.dumps(bundle))
+                (target/'state.json').write_text('null')
+                (target/'history.json').write_text('interrupted')
+                (target/'checkpoint.backup.json').write_text('invalid')
                 return ''
             return json.dumps({'artifacts':[artifact]} if 'artifacts' in args[-1] else [])
         with mock.patch.dict('os.environ',{'GITHUB_REPOSITORY':'test/repo'}), mock.patch('workflow_git.subprocess.check_output',side_effect=gh):
