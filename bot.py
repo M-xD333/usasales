@@ -617,15 +617,17 @@ def load_state():
 
 
 def trim_state(st, now, cfg):
-    st["pending"] = dict(((k, d) for k, d in st["pending"].items()
-                                if now - (d.get("published_ts") or d.get('fetched_ts', 0)) <= cfg["max_age_h"] * 3600),
-                               )
+    for key, deal in list(st['pending'].items()):
+        if now - (deal.get('published_ts') or deal.get('fetched_ts', 0)) > cfg['max_age_h'] * 3600:
+            del st['pending'][key]
     st["posted"] = {k: v for k, v in st["posted"].items() if now - v < max(cfg["dup_hours"], 24) * 3600 * 2}
     st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
     st["review"] = st["review"][-100:]
     for field, stamp in (('assessment_cache', 'at'), ('price_events', 'observed_at')):
         if field in st:
-            st[field] = {k: v for k, v in st[field].items() if now - v.get(stamp, 0) < cfg['hist_days'] * 86400}
+            for key, value in list(st[field].items()):
+                if now - value.get(stamp, 0) >= cfg['hist_days'] * 86400:
+                    del st[field][key]
 
 
 def prune_history(hist, now, days):

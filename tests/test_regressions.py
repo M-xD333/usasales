@@ -360,3 +360,16 @@ class LegacyMigrationRegression(unittest.TestCase):
             self.assertEqual(hist['old'],[[NOW,80,'thread-id','legacy']])
             store.save(st,hist)
             self.assertEqual(C.Store(root).load()[1],hist)
+
+
+class ProductionCheckpointRegression(unittest.TestCase):
+    def test_trim_callback_keeps_live_outbox_and_assessment_references(self):
+        with tempfile.TemporaryDirectory() as root:
+            store=C.Store(root);st=state();hist={};send=Mock()
+            def save(s):
+                bot.trim_state(s,NOW,cfg());store.save(s,hist)
+            bot.process([approved()],st,hist,NOW,cfg(),send,save_state=save)
+            restored,_=C.Store(root).load()
+            send.assert_called_once();self.assertFalse(restored['pending'])
+            self.assertEqual(len(restored['assessment_cache']),1)
+            self.assertEqual(len(restored['posted']),1)
