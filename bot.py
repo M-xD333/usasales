@@ -24,6 +24,7 @@ import market_prices
 import market_search
 import checkpoints
 import offer_queue
+import publication_history
 
 DATA = Path(__file__).parent / "data"
 STATE_F, HIST_F, LEGACY_SEEN_F = "state.json", "history.json", "seen.json"
@@ -641,7 +642,7 @@ def trim_state(st, now, cfg):
     for key, deal in list(st['pending'].items()):
         if now - (deal.get('published_ts') or deal.get('fetched_ts', 0)) > cfg['max_age_h'] * 3600:
             del st['pending'][key]
-    st["posted"] = {k: v for k, v in st["posted"].items() if now - v < max(cfg["dup_hours"], 24) * 3600 * 2}
+    # Confirmed publications have no TTL: an unchanged sale must not be reposted daily.
     st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
     st["review"] = st["review"][-100:]
     for field, stamp in (('assessment_cache', 'at'), ('price_events', 'observed_at')):
@@ -764,10 +765,11 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         assessments[offer_queue.listing_key(d)] = {'revision': q['revision'], 'rules_version': RULES_VERSION,
             'parser_version': PARSER_VERSION, 'reason': info['reason'], 'status': info['status'], 'at': now}
         dk = dup_key(d)
-        posted_at = state['posted'].get(dk, 0)
-        if ok and now - posted_at < cfg['dup_hours'] * 3600 and d.get('_rebound_at', 0) <= posted_at:
+        previous = publication_history.seen(state, d, dk) if ok else None
+        if previous:
+            publication_history.remember(state, d, previous['at'], previous['lowest_cents'])
             pending.pop(key, None)
-            stats['дубль за окно'] += 1
+            stats['повтор без снижения цены'] += 1
             continue
         if not ok:
             if info['final']:
@@ -793,6 +795,13 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats['ждут прямой ссылки магазина'] += 1
             continue
         d['url'] = direct
+        previous = publication_history.seen(state, d, dk)
+        if previous:
+            publication_history.remember(state, d, previous['at'], previous['lowest_cents'])
+            pending.pop(key, None)
+            stats['повтор без снижения цены'] += 1
+            log(f"[DEDUP] {d['name'][:80]}: цена {fmt_price(d['price'])} уже публиковалась или выше прежней; повтор пропущен")
+            continue
         if not dry and details_resolver and (not d.get('weight_kg') or not d.get('image_url')):
             details = details_resolver(direct) or {}
             if not d.get('weight_kg'):
@@ -833,6 +842,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats['доставлено с фото' if kind == 'photo' else 'доставлено текстом'] += 1
         q.update(status='delivered', delivered_at=now)
         state['processed'][key], state['posted'][dk] = now, now
+        publication_history.remember(state, d, now)
         pending.pop(key, None)
         save_state(state)
         stats['опубликовано'] += 1

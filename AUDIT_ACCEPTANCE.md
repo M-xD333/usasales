@@ -7,7 +7,7 @@
 | coupon_amount | $100 − $20 = $80; уже итоговая сумма не уменьшается повторно | test_regressions.PriceRegression.test_coupon_arithmetic_and_already_final_price |
 | 90_percent_discount | Приоритетная проверка; публикация после подтверждения | PriceRegression.test_extreme_discount_prioritised_then_published_after_verification |
 | verified_coupon | MPN сохраняется, подтверждённые $80 публикуются | PriceRegression.test_coupon_identity_is_independent_of_eligibility; test_confirmed_coupon_publishes_correct_final_price |
-| repeat_after_3_days | Истёкший TTL разрешает повтор | QueueRegression.test_duplicate_window_expires_despite_legacy_processed |
+| repeat_after_3_days | По уточнённому правилу от 2026-11-09 прежняя цена блокируется и после 24 часов | QueueRegression.test_same_price_is_blocked_after_legacy_duplicate_window |
 | reclassified_same_price | Исправленная категория переоценивается | QueueRegression.test_corrected_category_reassessed_at_same_price |
 | no_tradein | Отрицание не создаёт условную цену | PriceRegression.test_negations_and_actual_condition |
 | hardware_with_accessory | Главный товар сохраняет категорию | PriceRegression.test_free_accessories_do_not_replace_primary_category |
@@ -29,8 +29,13 @@
 | conflicting_markup_product_dropped | Каталог сохраняет неоднозначную карточку для перепроверки без выбора цены наугад | AdditionalAuditRegression.test_conflicting_catalog_prices_retained_for_verification |
 | stale_pending_overrides_fresh | $400 заменяет $500 и публикуется; старый quote не побеждает | QueueRegression.test_fresh_400_replaces_pending_500_and_is_published; test_old_quote_cannot_replace_new |
 
-Дополнительно проверяются: рост/повторное падение внутри TTL, версия правил, 429 с длинным retry_after, сохранение sending до запроса, неопределённая доставка, корректность HTML, атомарность при падении экспорта, канонический artifact без совместимых экспортов, конкурентное изменение только history, нулевой расход поисковой квоты, разрешённые купонные виджеты, сохранение pending вопреки старому processed.
+Дополнительно проверяются: отсутствие повтора при росте/возврате к прежней цене, версия правил, 429 с длинным retry_after, сохранение sending до запроса, неопределённая доставка, корректность HTML, атомарность при падении экспорта, канонический artifact без совместимых экспортов, конкурентное изменение только history, нулевой расход поисковой квоты, разрешённые купонные виджеты, сохранение pending вопреки старому processed.
 
 ## Границы проверки
 
 Тесты подтверждают логику на воспроизводимых входах. Они не гарантируют доступность Amazon/Newegg с IP GitHub Actions, актуальность купонов вне проверенной карточки или изображение в предпросмотре Telegram. Неизвестные данные остаются поводом для повторной проверки. Строгое совпадение версии товара и требование двух независимых магазинов для рыночного сравнения сохранены; MSRP не превращается в рыночную котировку. Категории `pixel` и `music_gear` сохранены для совместимости правил и истории.
+
+
+## Уточнение 2026-11-09: ежедневные повторы
+
+Прежнее требование разрешать повтор одинаковой акции после TTL заменено: время само по себе не делает предложение новым. `tests/test_publication_history.py` проверяет дни 1/2/3/7/30, более низкую цену, запрет более высокой и возврата к прежней, смену ленты/ID/заголовка/меток URL, два одинаковых товара в одном проходе, старые записи `posted`, разные варианты/состояние, сбой доставки, перезапуск и конкурентное Git-слияние постоянной истории.

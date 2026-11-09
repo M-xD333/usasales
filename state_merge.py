@@ -3,6 +3,7 @@ import copy
 import json
 import checkpoints as C
 import offer_queue as Q
+import publication_history as P
 
 
 def merge_state(remote, local):
@@ -16,6 +17,7 @@ def merge_state(remote, local):
         for key, value in local.get(name, {}).items():
             if value.get(stamp, 0) >= out[name].get(key, {}).get(stamp, 0):
                 out[name][key] = value
+    out['publication_history'] = P.merge(remote.get('publication_history', {}), local.get('publication_history', {}))
     candidates = Q.merge_latest(list(local.get('pending', {}).values()), remote.get('pending', {}))
     out['pending'] = {}
     for d in candidates:

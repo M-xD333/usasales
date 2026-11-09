@@ -51,19 +51,19 @@ class QueueRegression(unittest.TestCase):
         market.add(fresh); market.add(old)
         self.assertEqual(next(iter(market.state['quotes'].values()))['price'],400)
 
-    def test_duplicate_window_expires_despite_legacy_processed(self):
+    def test_same_price_is_blocked_after_legacy_duplicate_window(self):
         d=approved(); st=state()
         st['processed'][Q.pkey(d)] = NOW-3*86400
         st['posted'][bot.dup_key(d)] = NOW-3*86400
         send=Mock();bot.process([d],st,{},NOW,cfg(),send)
-        send.assert_called_once()
+        send.assert_not_called()
 
-    def test_rise_then_drop_is_a_new_event_inside_duplicate_window(self):
+    def test_rise_then_drop_does_not_repost_the_same_price(self):
         st=state();send=Mock()
         for dt,price in [(0,80),(120,150),(240,80)]:
             d=approved(f'SSD ${price} (was $160)');d['fetched_ts']=NOW+dt
             bot.process([d],st,{},NOW+dt,cfg(),send)
-        self.assertEqual(send.call_count,2)
+        self.assertEqual(send.call_count,1)
 
     def test_corrected_category_reassessed_at_same_price(self):
         st=state();send=Mock()

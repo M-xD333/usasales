@@ -18,9 +18,14 @@ class CheckpointError(ValueError):
 def validate_state(state):
     if not isinstance(state, dict):
         raise CheckpointError('state must be a JSON object; refusing to reset delivery history')
-    for key in ('posted', 'processed', 'pending', 'sources', 'assessment_cache', 'price_events'):
+    for key in ('posted', 'processed', 'pending', 'sources', 'assessment_cache', 'price_events', 'publication_history'):
         if key in state and not isinstance(state[key], dict):
             raise CheckpointError('invalid state field: ' + key)
+    for record in state.get('publication_history', {}).values():
+        if (not isinstance(record, dict) or type(record.get('lowest_cents')) is not int or record['lowest_cents'] <= 0
+                or not isinstance(record.get('at'), (int, float)) or not math.isfinite(record['at'])
+                or not isinstance(record.get('identities', []), list)):
+            raise CheckpointError('invalid publication history record')
     for name in ('posted', 'processed'):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in state.get(name, {}).values()):
             raise CheckpointError('invalid delivery timestamp: ' + name)
