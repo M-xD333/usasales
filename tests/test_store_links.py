@@ -33,6 +33,28 @@ class StoreLinks(unittest.TestCase):
         wrapped = "https://slickdeals.net/click?u2=" + quote(quote(NEWEGG, safe=""), safe="")
         self.assertEqual(L.unwrap(wrapped), NEWEGG)
 
+    def test_newegg_product_path_and_legacy_item_links_are_kept(self):
+        urls = [
+            NEWEGG,
+            "https://www.newegg.com/samsung-ssd/p/N82E16820147875?Item=N82E16820147875",
+            "https://www.newegg.com/Product/Product.aspx?Item=N82E16820147875",
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(L.merchant_url(url), url)
+                self.assertEqual(L.resolve_store_url(DISCUSS, [url]), url)
+                wrapped = "https://slickdeals.net/click?u2=" + quote(url, safe="")
+                self.assertEqual(L.unwrap(wrapped), url)
+
+    def test_newegg_item_parameter_does_not_authorize_search_or_lookalike(self):
+        for url in [
+            "https://www.newegg.com/search?Item=N82E16820147875",
+            "https://www.newegg.com/cart?Item=N82E16820147875",
+            "https://newegg.com.evil.test/p/N82E16820147875",
+        ]:
+            with self.subTest(url=url):
+                self.assertIsNone(L.merchant_url(url))
+
     def test_slickdeals_full_content_click_precedes_blocked_discussion(self):
         click = "https://slickdeals.net/click?lno=1&u3=opaque"
         e = sources.normalize_entry({"link": DISCUSS, "title": "SSD $99",

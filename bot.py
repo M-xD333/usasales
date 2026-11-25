@@ -45,7 +45,7 @@ RULES = {
 DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
-RULES_VERSION = 3
+RULES_VERSION = 4
 PARSER_VERSION = 3
 
 
@@ -379,7 +379,7 @@ def add_sample(samples, d, now):
     samples.append([now, d["price"], pid, d["source_id"]])
 
 
-def assess(d, stats, cfg, now, market_evidence=None):
+def assess(d, stats, cfg, now, market_evidence=None, aggregator_price=False):
     """Решение о публикации. Возвращает (ok, info). info['reason'] — причина отказа/ожидания."""
     info = {"claimed": None, "pct": 0.0, "sav": 0.0, "claim_bad": False, "median_pct": None,
             "new_low_obs": False, "reason": "", "final": False, "status": "insufficient_data",
@@ -424,7 +424,7 @@ def assess(d, stats, cfg, now, market_evidence=None):
         else:
             info.update(claimed=orig, pct=pct, sav=sav)
     strong_claim = (info["claimed"] is not None and info["pct"] >= min_pct and info["sav"] >= min_sav
-                    and not info["priority_verification"])
+                    and (aggregator_price or not info["priority_verification"]))
 
     strong_obs = False
     if n >= 3 and med:
@@ -433,7 +433,7 @@ def assess(d, stats, cfg, now, market_evidence=None):
         strong_obs = info["median_pct"] >= min_pct and (med - price) >= min_sav
 
     trust, score = d["trust"], d["community_score"]
-    if info["priority_verification"]:
+    if info["priority_verification"] and not aggregator_price:
         return no("экстремальная скидка: приоритетная проверка цены")
     if trust == "community":
         if score is None:
@@ -481,6 +481,8 @@ def build_message(d, info):
         label = "MSRP" if d["original_kind"] == "MSRP" else "было"
         price_line += f" ({label} {fmt_price(info['claimed'])}, −{info['pct']:.0f}%)"
     lines.append(price_line)
+    if info.get('aggregator_unverified'):
+        lines.append('ℹ️ Цена из агрегатора, не проверена на странице Newegg')
     weight = product_weight.display(d.get('weight_kg') or (d.get('product_meta') or {}).get('weight_kg'))
     lines.append('⚖️ Вес: ' + weight)
     direct = store_links.merchant_url(d.get("url"))
@@ -738,6 +740,9 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             add_sample(samples, d, now)
         per_src[sid]['оценено'] += 1
         verified = None
+        aggregator_url = market_prices.newegg_aggregator_url(d)
+        if aggregator_url and d['trust'] not in ('curated', 'community') and not info['final']:
+            ok = False  # Unvetted feeds always require two independent competing stores.
         needs_confirmation = info['priority_verification'] or d.get('price_kind') in ('coupon', 'code')
         if market and not info['final'] and needs_confirmation:
             verified = market.verify_offer(d, force_refresh=True)
@@ -751,11 +756,23 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
                     info['verified_offer'] = verified
             elif ok:
                 info['verified_offer'] = verified
+        if market and aggregator_url and not info['final']:
+            pinned = dict(d, url=aggregator_url, store_candidates=[])
+            checked = market.verify_offer(pinned)
+            if checked:
+                info['verified_offer'] = checked
+            elif market.raw_verified.get(aggregator_url) is not None:
+                ok = False
+                info['reason'] = 'карточка Newegg не подтверждает цену или условия'
+            elif d['trust'] in ('curated', 'community') and market_prices.purchase_conditions(d)['eligible']:
+                ok, info = assess(d, stats_h, cfg, now, aggregator_price=True)
+                info['aggregator_unverified'] = True
         if market and not ok and not info['final']:
             evidence, reason = market.compare(d, *cfg['rules'].get(d['cat'], DEFAULT_RULE))
             if evidence:
                 ok, info = assess(d, stats_h, cfg, now, evidence)
                 info['verified_offer'] = {'url': evidence['candidate_url']}
+                info['aggregator_unverified'] = evidence.get('candidate_unverified', False)
             else:
                 info['reason'] = (info['reason'] + '; сравнение магазинов: ' + reason).strip('; ')
         info['status'] = 'discount_confirmed' if ok else info['status']
@@ -781,7 +798,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats['отложено лимитом'] += 1
             continue
         # Pin a verified offer; a secondary RSS link must never replace it.
-        direct = (info.get('verified_offer') or {}).get('url')
+        direct = (info.get('verified_offer') or {}).get('url') or (aggregator_url if info.get('aggregator_unverified') else None)
         if not direct:
             started = time.monotonic()
             direct = store_links.resolve_store_url(d['url'], d.get('store_candidates', []), d.get('discuss', ''),

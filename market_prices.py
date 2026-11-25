@@ -167,6 +167,33 @@ def quote(deal, observed_at):
             "mpn": normalize(meta.get("mpn")), "brand": normalize(meta.get("brand"))}
 
 
+def newegg_aggregator_url(deal):
+    """A roundup's secondary merchant links do not establish its offer's store."""
+    if deal.get('price_origin') != 'feed':
+        return None
+    primary = canonical_url(deal.get('url'))
+    if shop(primary) == 'newegg.com':
+        return primary
+    if normalize(deal.get('store')) not in ('newegg', 'neweggcom'):
+        return None
+    return next((u for raw in deal.get('store_candidates', [])
+                 if (u := canonical_url(raw)) and shop(u) == 'newegg.com'), None)
+
+
+def aggregator_candidate(deal, url):
+    meta = deal.get('product_meta') or {}
+    conditions = purchase_conditions(deal)
+    if not identity(deal) or not conditions['eligible'] or deal.get('cond') != 'New':
+        return None
+    shipping = 0 if 'free_shipping' in deal.get('flags', []) else meta.get('shipping')
+    if shipping is not None and (not number(shipping) or shipping < 0):
+        return None
+    return dict(key=identity(deal), keys=sorted(identity_keys(deal)), shop='newegg.com',
+                url=url, price=conditions['price'], shipping=shipping,
+                gtins=[g for x in meta.get('gtins', []) if (g := valid_gtin(x))],
+                mpn=normalize(meta.get('mpn')), brand=normalize(meta.get('brand')))
+
+
 class MarketPrices:
     def __init__(self, state, now, verifier=None, max_requests=12, budget=60,
                  discoverer=None, max_search_requests=4):
@@ -372,7 +399,15 @@ class MarketPrices:
         if len(by_shop) < 2:
             detail = "; поиск: " + "; ".join(search["notes"]) if search else "; поиск ожидает лимита запросов" if self.discoverer else ""
             return None, f"подтверждено других независимых магазинов: {len(by_shop)}/2" + detail
-        current = self.verify_offer(deal)
+        aggregator_url = newegg_aggregator_url(deal)
+        pinned = dict(deal, url=aggregator_url, store_candidates=[]) if aggregator_url else deal
+        current = self.verify_offer(pinned)
+        unverified = False
+        # An explicit store response is evidence, even when it fails quote validation.
+        # Only absence of a usable page permits an explicitly attributed feed price.
+        if not current and aggregator_url and self.raw_verified.get(aggregator_url) is None:
+            current = aggregator_candidate(deal, aggregator_url)
+            unverified = current is not None
         if not current or not keys.intersection(current.get("keys", [current["key"]])):
             return None, "текущая цена, наличие или точная версия не подтверждены магазином"
         if abs(current["price"] - deal["price"]) > 0.01:
@@ -395,4 +430,5 @@ class MarketPrices:
             return None, f"выгода к минимальной цене других магазинов {pct:.0f}% / ${saved:.0f} ниже порога"
         return {"baseline": baseline, "total": total, "pct": pct, "saved": saved,
                 "references": sorted(by_shop.values(), key=lambda q: q["price"]),
-                "checked_at": self.now, "candidate_url": current["url"]}, ""
+                "checked_at": self.now, "candidate_url": current["url"],
+                "candidate_unverified": unverified}, ""
