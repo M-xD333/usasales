@@ -363,10 +363,12 @@ class MarketPrices:
         self.prepared = True
 
     def compare(self, deal, min_pct, min_sav):
+        aggregator_url = newegg_aggregator_url(deal)
         key = identity(deal)
         if not key and self.discoverer:
             # A feed may omit the manufacturer's part number; only the store may supply it.
-            for raw in [deal.get("url"), *deal.get("store_candidates", [])]:
+            own_candidates = [aggregator_url] if aggregator_url else [deal.get("url"), *deal.get("store_candidates", [])]
+            for raw in own_candidates:
                 current = self.verify(raw)
                 if current:
                     deal["product_meta"] = {"brand": current["brand"], "mpn": current["mpn"], "gtins": current["gtins"]}
@@ -379,7 +381,7 @@ class MarketPrices:
         own_urls = [u for x in own_urls if (u := canonical_url(x))]
         if not own_urls:
             return None, "нет прямой ссылки для проверки текущей цены"
-        candidate_shop = shop(own_urls[0])
+        candidate_shop = shop(aggregator_url or own_urls[0])
         if not self.prepared:
             self._search(deal)
         search = self.state["searched"].get(key)

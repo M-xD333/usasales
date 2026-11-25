@@ -70,3 +70,47 @@ def history_eligible(deal, now, max_age):
             and 0 <= now - deal['published_ts'] <= max_age * 3600
             and deal.get('price_kind', 'regular') == 'regular'
             and not set(deal.get('flags', [])) - {'free_shipping'})
+
+
+def delivery_protected(deal):
+    return deal.get('_queue', {}).get('status') in ('sending', 'delivery_unknown')
+
+
+def prioritize(deals):
+    """Round-robin sources/brands within quality tiers, newest first per group."""
+    from collections import defaultdict, deque
+    tiers = defaultdict(lambda: defaultdict(list))
+    for d in deals:
+        extreme = (M.number(d.get('price')) and M.number(d.get('original'))
+                   and 0 < d['price'] < .15 * d['original'])
+        tier = (0 if delivery_protected(d) else 1 if extreme else
+                4 if d.get('cat') in ('other', 'review') else
+                3 if d.get('cat') in ('laptop', 'prebuilt') else 2)
+        brand = M.normalize((d.get('product_meta') or {}).get('brand')) or M.shop(d.get('url')) or ''
+        tiers[tier][(d.get('source_id', ''), brand)].append(d)
+    out = []
+    for tier in sorted(tiers):
+        groups = {k: deque(sorted(v, key=lambda d: -(d.get('published_ts') or d.get('fetched_ts', 0))))
+                  for k, v in sorted(tiers[tier].items())}
+        while groups:
+            for key in list(groups):
+                out.append(groups[key].popleft())
+                if not groups[key]:
+                    del groups[key]
+    return out
+
+
+def bound_pending(pending, limit=500):
+    """Eviction is not a rejection: no processed/floor/delivery markers are written.
+
+    Uncertain deliveries are protected even if they alone exceed the soft cap.
+    Incoming deals are still assessed before this end-of-cycle retention bound.
+    """
+    ordered = prioritize(list(pending.values()))
+    protected = [d for d in ordered if delivery_protected(d)]
+    rest = [d for d in ordered if not delivery_protected(d)]
+    keep = protected + rest[:max(0, limit - len(protected))]
+    removed = len(pending) - len(keep)
+    pending.clear()
+    pending.update((pkey(d), d) for d in keep)
+    return removed

@@ -67,7 +67,7 @@ def test_unvetted_requires_comparison_even_with_claimed_discount():
 
 def test_community_votes_still_required_and_extreme_curated_allowed():
     d = candidate('community'); d['community_score'] = 0
-    assert publish(d, engine(0))[0]['опубликовано'] == 0
+    assert publish(d, engine(2))[0]['опубликовано'] == 0
     d = candidate('curated'); d['price'] = 50
     assert publish(d, engine(0))[0]['опубликовано'] == 1
 
@@ -83,3 +83,30 @@ def test_probed_newegg_feed_is_unvetted_and_enabled():
     source = next(s for s in sources.active_sources({}) if s.id == 'sd-q-newegg')
     assert source.trust == 'unvetted'
     assert source.url == sources._sd_search('newegg').url
+
+
+def test_aggregator_secondary_link_does_not_exclude_amazon_reference():
+    d = candidate()
+    d.update(url='https://slickdeals.net/f/123-newegg-deal', store='Newegg',
+             store_candidates=['https://www.amazon.com/dp/B012345678',
+                               'https://www.newegg.com/p/N82E16800000001'])
+    result, reason = engine().compare(d, 15, 50)
+    assert result, reason
+    assert {q['shop'] for q in result['references']} == {'amazon.com', 'bestbuy.com'}
+
+
+def test_newegg_identity_not_borrowed_from_secondary_accessory():
+    d = candidate()
+    d.update(title='DDR5 RAM at Newegg', cat='ram', product_meta={},
+             url='https://slickdeals.net/f/123-deal', store='Newegg',
+             store_candidates=['https://www.amazon.com/dp/B012345678',
+                               'https://www.newegg.com/p/N82E16800000001'])
+    e = engine(); calls = []
+    def verifier(url):
+        calls.append(url)
+        return offer('amazon.com', 500) if 'amazon.com' in url else None
+    e.verifier = verifier
+    e.discoverer = Mock()
+    assert e.compare(d, 15, 50)[0] is None
+    assert not any('amazon.com' in url for url in calls)
+    assert d['product_meta'] == {}
