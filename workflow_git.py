@@ -11,6 +11,9 @@ import time
 import checkpoints
 import state_merge
 
+# Accept the existing ~28 MB legacy generation during migration; reject unbounded inputs.
+RECOVERY_MAX_FILE_BYTES = 64 * 1024 * 1024
+
 
 def safe_error(value):
     value = re.sub(r"https?://[^\s]+", "[remote URL]", str(value))
@@ -51,6 +54,11 @@ class RunnerGit:
             store = checkpoints.Store(data)
             state, history = store.load()
             files['data/' + checkpoints.FILE] = json.dumps(store.previous, ensure_ascii=False).encode()
+            for archive in (data / 'migrations').glob('pre-compaction-*.json.gz'):
+                if not archive.is_symlink():
+                    files[archive.relative_to(self.root).as_posix()] = archive.read_bytes()
+            if (data / checkpoints.BACKUP).exists():
+                files['data/' + checkpoints.BACKUP] = (data / checkpoints.BACKUP).read_bytes()
             if 'data/' + checkpoints.BACKUP in files:
                 try:
                     checkpoints.validate_bundle(json.loads(files['data/' + checkpoints.BACKUP]))
@@ -188,7 +196,7 @@ class RunnerGit:
                 if not path.exists():
                     path = Path(tmp) / "data" / name
                 if path.exists():
-                    if path.is_symlink() or path.stat().st_size > 20_000_000:
+                    if path.is_symlink() or path.stat().st_size > RECOVERY_MAX_FILE_BYTES:
                         raise ValueError("invalid checkpoint file: " + name)
                     value = path.read_bytes()
                     recovered["data/" + name] = value
