@@ -1,0 +1,27 @@
+name: Read-only public channel audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DRY_RUN: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Read public channel metadata and history
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python tools/channel_audit.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: own-channel-audit
+          path: own-channel-audit.json
+          retention-days: 7
