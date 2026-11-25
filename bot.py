@@ -44,7 +44,7 @@ RULES = {
 DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
-RULES_VERSION = 4
+RULES_VERSION = 5
 PARSER_VERSION = 3
 
 
@@ -642,7 +642,7 @@ def load_state():
 
 def trim_state(st, now, cfg):
     for key, deal in list(st['pending'].items()):
-        if now - (deal.get('published_ts') or deal.get('fetched_ts', 0)) > cfg['max_age_h'] * 3600:
+        if not offer_queue.delivery_protected(deal) and now - (deal.get('published_ts') or deal.get('fetched_ts', 0)) > cfg['max_age_h'] * 3600:
             del st['pending'][key]
     # Confirmed publications have no TTL: an unchanged sale must not be reposted daily.
     st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
@@ -674,9 +674,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
     state.setdefault('review', [])
     assessments = state.setdefault('assessment_cache', {})
     deals = offer_queue.merge_latest(deals, state.setdefault('pending', {}))
-    deals.sort(key=lambda d: (d['cat'] in ('laptop', 'prebuilt'),
-                             not (d.get('original') and d.get('price') and d['price'] < .15 * d['original']),
-                             -(d.get('published_ts') or 0)))
+    deals = offer_queue.prioritize(deals)
     pending = {offer_queue.pkey(d): d for d in deals}
     state['pending'] = pending
     for d in deals:
@@ -770,7 +768,10 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             elif d['trust'] in ('curated', 'community') and market_prices.purchase_conditions(d)['eligible']:
                 ok, info = assess(d, stats_h, cfg, now, aggregator_price=True)
                 info['aggregator_unverified'] = True
-        if market and not ok and not info['final']:
+        community_blocked = (aggregator_url and d['trust'] == 'community' and
+                             (d['community_score'] is None or d['community_score'] <
+                              cfg['min_score'] * (2 if d['cat'] == 'combo' else 1)))
+        if market and not ok and not info['final'] and not community_blocked:
             evidence, reason = market.compare(d, *cfg['rules'].get(d['cat'], DEFAULT_RULE))
             if evidence:
                 ok, info = assess(d, stats_h, cfg, now, evidence)
@@ -864,6 +865,10 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         save_state(state)
         stats['опубликовано'] += 1
         per_src[sid]['опубликовано'] += 1
+    removed = offer_queue.bound_pending(pending)
+    if removed:
+        stats['вытеснено из очереди'] += removed
+        log(f'[QUEUE] Вытеснено {removed} кандидатов; сохранено {len(pending)}, факты доставки сохранены')
     save_state(state)
     save_hist(hist)
     return stats, per_src, waiting, fatal

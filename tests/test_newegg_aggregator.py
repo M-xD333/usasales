@@ -67,7 +67,7 @@ def test_unvetted_requires_comparison_even_with_claimed_discount():
 
 def test_community_votes_still_required_and_extreme_curated_allowed():
     d = candidate('community'); d['community_score'] = 0
-    assert publish(d, engine(0))[0]['опубликовано'] == 0
+    assert publish(d, engine(2))[0]['опубликовано'] == 0
     d = candidate('curated'); d['price'] = 50
     assert publish(d, engine(0))[0]['опубликовано'] == 1
 
