@@ -55,6 +55,8 @@ SOURCES = [
     Source("sd-popular", "Slickdeals Popular", SD + "?mode=popdeals&searcharea=deals&searchin=first&rss=1", trust="curated"),
     Source("sd-hot", "Slickdeals Hot Deals", SD + "?searchin=first&forumchoice%5B%5D=9&rss=1"),
     *[_sd_search(t) for t in SEARCH_TERMS],
+    _sd_search("newegg"),  # runner probe 2026-11-25: HTTP 200, 25 RSS entries; unvetted
+
     # --- отключены до успешного smoke-теста (python bot.py --smoke) ---
     Source("techbargains", "TechBargains", "http://www.techbargains.com/rss.xml", enabled=False,
            note="smoke 2026-11-03: HTTP 200, 600 записей, в основном быт; без старой цены в заголовке почти ничего не публикует"),
