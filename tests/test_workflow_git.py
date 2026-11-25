@@ -247,6 +247,25 @@ class RunnerSyncTests(unittest.TestCase):
         self.assertEqual((self.runner / "bot.py").read_text(), "# old code\n")
         self.assertEqual((self.runner / "data/state.json").read_text(), checkpoint)
 
+    def test_push_keeps_queue_cap_when_remote_has_evicted_entries(self):
+        import copy
+        import offer_queue as Q
+        from test_queue_bound import make
+        ds = [make(i) for i in range(600)]
+        uncertain = make(900, 'uncertain', _queue={'status': 'delivery_unknown'})
+        remote = {'posted': {'first': 1}, 'pending': {Q.pkey(d): d for d in ds + [uncertain]},
+                  'publication_history': {'floor': {'lowest_cents': 5000, 'at': 1, 'identities': []}}}
+        local = copy.deepcopy(remote)
+        Q.bound_pending(local['pending'])
+        (self.runner / 'data/state.json').write_text(json.dumps(local))
+        self.edit_remote('data/state.json', json.dumps(remote))
+        self.sync.push()
+        merged = json.loads(self.remote_file('data/state.json'))
+        self.assertEqual(len(merged['pending']), 500)
+        self.assertIn(Q.pkey(uncertain), merged['pending'])
+        self.assertEqual(merged['posted'], remote['posted'])
+        self.assertEqual(merged['publication_history'], remote['publication_history'])
+
 
 if __name__ == "__main__":
     unittest.main()

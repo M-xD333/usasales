@@ -44,6 +44,7 @@ def merge_state(remote, local):
     if remote.get('maintenance') or local.get('maintenance'):
         out['maintenance'] = max((remote.get('maintenance', {}), local.get('maintenance', {})), key=lambda v:v.get('compacted_at', 0))
     cache_retention.compact(out)
+    Q.bound_pending(out['pending'])
     return C.validate_state(out)
 
 

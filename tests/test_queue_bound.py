@@ -43,3 +43,21 @@ def test_bound_does_not_write_dedup_or_delivery_facts():
     Q.bound_pending(state['pending'])
     for key in ('posted', 'publication_history', 'last_delivery'):
         assert state[key] == before[key]
+
+
+def test_remote_merge_does_not_resurrect_evicted_queue():
+    import state_merge
+    remote_deals = [make(i) for i in range(600)]
+    unknown = make(900, 'uncertain', _queue={'status': 'delivery_unknown'})
+    remote = {'pending': {Q.pkey(d): d for d in remote_deals + [unknown]},
+              'posted': {'confirmed': NOW},
+              'publication_history': {'floor': {'lowest_cents': 5000, 'at': NOW, 'identities': []}},
+              'last_delivery': {'message_id': 123}}
+    local = copy.deepcopy(remote)
+    Q.bound_pending(local['pending'])
+    merged = state_merge.merge_state(remote, local)
+    assert len(merged['pending']) == 500
+    assert Q.pkey(unknown) in merged['pending']
+    for key in ('posted', 'publication_history', 'last_delivery'):
+        assert merged[key] == remote[key]
+    assert state_merge.merge_state(remote, merged)['pending'] == merged['pending']
