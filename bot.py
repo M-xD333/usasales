@@ -23,6 +23,7 @@ import product_weight
 import market_prices
 import market_search
 import checkpoints
+import cache_retention
 import offer_queue
 import publication_history
 
@@ -645,11 +646,7 @@ def trim_state(st, now, cfg):
     # Confirmed publications have no TTL: an unchanged sale must not be reposted daily.
     st["processed"] = dict(sorted(st["processed"].items(), key=lambda kv: kv[1])[-5000:])
     st["review"] = st["review"][-100:]
-    for field, stamp in (('assessment_cache', 'at'), ('price_events', 'observed_at')):
-        if field in st:
-            for key, value in list(st[field].items()):
-                if now - value.get(stamp, 0) >= cfg['hist_days'] * 86400:
-                    del st[field][key]
+    cache_retention.compact(st, now, cfg['max_age_h'])
 
 
 def prune_history(hist, now, days):

@@ -214,6 +214,28 @@ class RunnerSyncTests(unittest.TestCase):
         self.assertEqual(st['posted'],{'first':1,'delivered':5})
         self.assertGreater(restored.generation,10)
 
+    def test_migration_archive_is_included_in_same_snapshot(self):
+        import checkpoints as C
+        C.Store(self.runner/'data').save({'posted':{'sent':1},'assessment_cache':{'old':{'at':0}}},{})
+        files=self.sync.snapshot()
+        self.assertTrue(any(name.startswith('data/migrations/') for name in files))
+        self.assertEqual(json.loads(files['data/checkpoint.json'])['state']['posted'],{'sent':1})
+
+    def test_recovery_accepts_valid_legacy_generation_larger_than_20mb(self):
+        artifact={'name':'deals-state-99','created_at':'2026-11-25T12:00:00Z',
+                  'workflow_run':{'id':99,'head_branch':'main'}}
+        bundle={'generation_id':10,'state':{'posted':{'delivered':5},'padding':'x'*20_000_001},'history':{}}
+        def gh(args, **kwargs):
+            if 'download' in args:
+                target=Path(args[args.index('--dir')+1])
+                (target/'checkpoint.json').write_text(json.dumps(bundle))
+                return ''
+            return json.dumps({'artifacts':[artifact]} if 'artifacts' in args[-1] else [])
+        with mock.patch.dict('os.environ',{'GITHUB_REPOSITORY':'test/repo'}), mock.patch('workflow_git.subprocess.check_output',side_effect=gh):
+            self.sync.restore_checkpoint()
+        restored=json.loads((self.runner/'data/state.json').read_text())
+        self.assertEqual(restored['posted'],{'first':1,'delivered':5})
+
     def test_broken_remote_code_does_not_replace_working_code_or_state(self):
         before = git(self.runner, "rev-parse", "HEAD").stdout
         checkpoint = '{"posted": {"latest": 4}}'

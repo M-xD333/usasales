@@ -1,5 +1,8 @@
 """Atomic state + history generations, with strict legacy migration and recovery."""
 import copy
+import gzip
+import hashlib
+import cache_retention
 import json
 import math
 import os
@@ -29,6 +32,8 @@ def validate_state(state):
     for name in ('posted', 'processed'):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in state.get(name, {}).values()):
             raise CheckpointError('invalid delivery timestamp: ' + name)
+    if 'maintenance' in state and not isinstance(state['maintenance'], dict):
+        raise CheckpointError('maintenance must be an object')
     if 'review' in state and not isinstance(state['review'], list):
         raise CheckpointError('review must be a list')
     return state
@@ -100,6 +105,7 @@ class Store:
                     self.previous = copy.deepcopy(bundle)
                     if name == BACKUP:
                         print('[WARN] recovered atomic checkpoint backup; primary checkpoint is invalid')
+                    self.compact_loaded(bundle['state'], bundle['history'])
                     return bundle['state'], bundle['history']
                 except CheckpointError as ex:
                     errors.append(str(ex))
@@ -115,7 +121,39 @@ class Store:
             state = {'version': 3, 'processed': {k: v for k, v in old.items() if not k.startswith('k:')},
                      'posted': {}, 'pending': {}, 'sources': {}, 'review': []}
         history = validate_history(read_json(history_path)) if history_path.exists() else {}
+        self.compact_loaded(state, history)
         return state, history
+
+    def compact_loaded(self, state, history):
+        original = copy.deepcopy(self.previous or {'generation_id': 1, 'state': state, 'history': history})
+        if not cache_retention.compact(state):
+            return
+        if state.get('maintenance', {}).get('compaction_version', 0) < cache_retention.MIGRATION_VERSION:
+            # Durable compressed original before replacing any authoritative generation.
+            payload = json.dumps(original, ensure_ascii=False, allow_nan=False).encode()
+            digest = hashlib.sha256(payload).hexdigest()
+            directory = self.root / 'migrations'
+            directory.mkdir(parents=True, exist_ok=True)
+            target = directory / ('pre-compaction-' + digest + '.json.gz')
+            if not target.exists():
+                fd, temp = tempfile.mkstemp(dir=directory, suffix='.tmp')
+                try:
+                    with os.fdopen(fd, 'wb') as stream:
+                        with gzip.GzipFile(fileobj=stream, mode='wb', mtime=0) as zipped:
+                            zipped.write(payload)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(temp, target)
+                    dfd = os.open(directory, os.O_RDONLY)
+                    try:
+                        os.fsync(dfd)
+                    finally:
+                        os.close(dfd)
+                finally:
+                    if os.path.exists(temp):
+                        os.unlink(temp)
+            state.setdefault('maintenance', {}).update(compaction_version=cache_retention.MIGRATION_VERSION, compacted_at=time.time())
+        self.save(state, history)
 
     def save(self, state, history):
         validate_state(state)

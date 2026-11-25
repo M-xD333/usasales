@@ -1,5 +1,6 @@
 """Semantic checkpoint merge when another writer changed data on the remote."""
 import copy
+import cache_retention
 import json
 import checkpoints as C
 import offer_queue as Q
@@ -40,6 +41,9 @@ def merge_state(remote, local):
         market['brand_searched'][key] = max(value, market['brand_searched'].get(key, value))
     if remote.get('market_prices') or local.get('market_prices'):
         out['market_prices'] = market
+    if remote.get('maintenance') or local.get('maintenance'):
+        out['maintenance'] = max((remote.get('maintenance', {}), local.get('maintenance', {})), key=lambda v:v.get('compacted_at', 0))
+    cache_retention.compact(out)
     return C.validate_state(out)
 
 
