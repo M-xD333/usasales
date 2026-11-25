@@ -45,6 +45,20 @@ def on_domain(url, domains):
     return any(host == d.lower() or host.endswith("." + d.lower()) for d in domains)
 
 
+def newegg_combo_id(value):
+    url = web_url(value)
+    if not url or not on_domain(url, ('newegg.com',)):
+        return None
+    p = urlsplit(url)
+    if p.path.lower().rstrip('/') != '/product/combodealdetails':
+        return None
+    values = [v for k, vs in parse_qs(p.query).items() if k.lower() == 'itemlist' for v in vs]
+    if len(values) != 1:
+        return None
+    match = re.fullmatch(r'Combo\.(\d{4,12})', values[0], re.I)
+    return match.group(1) if match else None
+
+
 def merchant_url(value):
     url = web_url(value)
     if not url or not on_domain(url, MERCHANTS):
@@ -54,7 +68,9 @@ def merchant_url(value):
         m = re.search(r"/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})(?:[/?]|$)", p.path + "/", re.I)
         return "https://www.amazon.com/dp/" + m.group(1).upper() if m else None
     if on_domain(url, ("newegg.com",)):
-        if not re.search(r"/p/[A-Z0-9]+(?:/|$)", p.path, re.I) and not parse_qs(p.query).get("Item"):
+        if p.path.lower().rstrip("/") == "/product/combodealdetails" and not newegg_combo_id(url):
+            return None
+        if not re.search(r"/p/[A-Z0-9]+(?:/|$)", p.path, re.I) and not parse_qs(p.query).get("Item") and not newegg_combo_id(url):
             return None
     music_routes = {"sweetwater.com": r"/store/detail/", "guitarcenter.com": r"\.gc$",
                     "musiciansfriend.com": r"/(?:keyboards-midi|pro-audio|accessories|guitars|bass|drums-percussion)/",

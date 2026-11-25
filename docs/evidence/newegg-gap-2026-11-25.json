@@ -1,0 +1,55 @@
+{
+  "window": [
+    "2026-11-18T12:23:25.696073+00:00",
+    "2026-11-25T12:23:25.696073+00:00"
+  ],
+  "checkpoint_saved_at": 1795609148.976757,
+  "boundary_reached": true,
+  "public_text_posts": 192,
+  "newegg_count": 2,
+  "competitor_daily_tashkent": {
+    "2026-11-19": 2
+  },
+  "rows": [
+    {
+      "post": "pcpartsdrop/27174",
+      "at": "2026-11-19T14:59:19+00:00",
+      "title": "NewEgg [$Combo, 1,639.98]: ZOTAC Gaming GeForce RTX 5070 Ti SFF OC 16GB GDDR7 Gr",
+      "tracking_domain": "click.linksynergy.com",
+      "tracking_params": [
+        "id",
+        "mid",
+        "murl"
+      ],
+      "target": "https://www.newegg.com/Product/ComboDealDetails?ItemList=Combo.4884345",
+      "target_params": [
+        "ItemList"
+      ],
+      "day_tashkent": "2026-11-19",
+      "known_publication_match": false,
+      "blocker": "link unresolved: unsupported ComboDealDetails before this fix",
+      "historical_ingestion": "unknown; current pending/RSS is not an arrival archive"
+    },
+    {
+      "post": "pcpartsdrop/27137",
+      "at": "2026-11-18T21:37:18+00:00",
+      "title": "NewEgg [$Combo, 1,109.98]: ZOTAC SOLID OC GeForce RTX 5070 Graphics Card",
+      "tracking_domain": "click.linksynergy.com",
+      "tracking_params": [
+        "id",
+        "mid",
+        "murl"
+      ],
+      "target": "https://www.newegg.com/Product/ComboDealDetails?ItemList=Combo.4884342",
+      "target_params": [
+        "ItemList"
+      ],
+      "day_tashkent": "2026-11-19",
+      "known_publication_match": false,
+      "blocker": "link unresolved: unsupported ComboDealDetails before this fix",
+      "historical_ingestion": "unknown; current pending/RSS is not an arrival archive"
+    }
+  ],
+  "our_daily_total": null,
+  "limitation": "Publication ledger aliases are hashed; total merchant/day counts require the owner channel or an event log."
+}

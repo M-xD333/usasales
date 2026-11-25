@@ -88,8 +88,11 @@ def purchase_conditions(deal):
     text = deal.get("title", "")
     if conditional_phone(text) or set(deal.get("flags", [])) - {"free_shipping"}:
         return {"eligible": False, "reason": "условия покупки не подтверждены"}
-    if re.search(r"members? only|membership|cashback|rebate|gift card|bundle", text, re.I):
+    if re.search(r"members? only|membership|cashback|rebate|gift card", text, re.I):
         return {"eligible": False, "reason": "условная цена"}
+    if re.search(r'\bbundle\b', text, re.I) and not (
+            deal.get('cat') == 'combo' and store_links.newegg_combo_id(newegg_aggregator_url(deal))):
+        return {"eligible": False, "reason": "не подтверждена ссылка на комплект"}
     if deal.get("price_kind", "regular") in ("coupon", "code"):
         coupon = (deal.get("product_meta") or {}).get("coupon") or {}
         base = deal.get("price")
@@ -108,6 +111,8 @@ def product_identity(deal):
     """No fuzzy title similarity. Pixel fallback requires the full retail variant."""
     meta = deal.get("product_meta") or {}
     text = deal.get("title", "")
+    if deal.get("cat") == "combo":
+        return None  # Component identifiers do not identify a complete bundle.
     if deal.get("cat") == "pixel":
         # A phone with an unspecified carrier must not be compared with unlocked stock.
         if not re.search(r"\b(?:factory[ -]?)?unlocked\b", text, re.I):
@@ -140,6 +145,8 @@ def identity_keys(deal):
 
 
 def quote(deal, observed_at):
+    if deal.get("cat") == "combo":
+        return None  # An individual component MPN never identifies the complete kit.
     meta = deal.get("product_meta") or {}
     url = canonical_url(deal.get("url"))
     key = identity(deal)
@@ -178,6 +185,26 @@ def newegg_aggregator_url(deal):
         return None
     return next((u for raw in deal.get('store_candidates', [])
                  if (u := canonical_url(raw)) and shop(u) == 'newegg.com'), None)
+
+
+def aggregator_conditions(deal):
+    """Trusted feed prices stay attributed; this never creates verified store evidence."""
+    strict = purchase_conditions(deal)
+    if strict['eligible'] or deal.get('trust') not in ('curated', 'community'):
+        return strict
+    if not newegg_aggregator_url(deal) or deal.get('price_kind') not in ('coupon', 'code'):
+        return strict
+    parts = deal.get('price_components') or {}
+    price = deal.get('price')
+    if not number(price) or price <= 0 or parts.get('final_price') != price:
+        return strict
+    if deal['price_kind'] == 'code' and not re.fullmatch(r'[A-Z0-9]{4,20}', deal.get('code') or ''):
+        return strict
+    if deal['price_kind'] == 'coupon':
+        base, amount = parts.get('base_price'), parts.get('coupon_amount')
+        if not (number(base) and number(amount) and 0 < amount < base and abs(base - amount - price) < .01):
+            return strict
+    return purchase_conditions(dict(deal, price_kind='regular'))
 
 
 def aggregator_candidate(deal, url):
@@ -363,6 +390,8 @@ class MarketPrices:
         self.prepared = True
 
     def compare(self, deal, min_pct, min_sav):
+        if deal.get("cat") == "combo":
+            return None, "для сравнения комплекта нужен подтверждённый полный состав, не цена одной детали"
         aggregator_url = newegg_aggregator_url(deal)
         key = identity(deal)
         if not key and self.discoverer:

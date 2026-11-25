@@ -3,6 +3,7 @@ import hashlib
 import re
 from urllib.parse import parse_qs, urlsplit
 import market_prices as M
+import store_links
 
 
 def cents(price):
@@ -20,6 +21,9 @@ def aliases(deal):
     if domain == 'amazon.com' and asin:
         keys.append('asin:' + asin.group(1).upper() + '|' + condition)
     if domain == 'newegg.com':
+        combo = store_links.newegg_combo_id(url)
+        if combo:
+            keys.append('newegg-combo:' + combo + '|' + condition)
         match = re.search(r'/p/([A-Z0-9-]+)(?:/|$)', urlsplit(url).path, re.I)
         item = parse_qs(urlsplit(url).query).get('Item', [None])[0] or (match.group(1) if match else None)
         if item:
