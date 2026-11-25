@@ -50,6 +50,10 @@
       "historical_ingestion": "unknown; current pending/RSS is not an arrival archive"
     }
   ],
-  "our_daily_total": null,
-  "limitation": "Publication ledger aliases are hashed; total merchant/day counts require the owner channel or an event log."
+  "our_daily_total": 0,
+  "limitation": "Historical aggregator arrivals are not archived; affiliate tracking does not prove a data source.",
+  "our_channel": "usasalessearch",
+  "our_text_posts": 48,
+  "our_daily_tashkent": {},
+  "our_source": "Read-only getChat + complete public seven-day preview, same exact window as competitor"
 }

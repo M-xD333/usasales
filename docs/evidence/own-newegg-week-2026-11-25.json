@@ -1,0 +1,29 @@
+{
+  "channel": "usasalessearch",
+  "window": [
+    "2026-11-18T12:23:25.696073+00:00",
+    "2026-11-25T12:23:25.696073+00:00"
+  ],
+  "boundary_reached": true,
+  "public_text_posts": 48,
+  "newegg_count": 0,
+  "daily_tashkent": {},
+  "newegg_posts": [],
+  "public_pages": [
+    "https://t.me/s/usasalessearch",
+    "https://t.me/s/usasalessearch?before=122",
+    "https://t.me/s/usasalessearch?before=102"
+  ],
+  "verified_primary_link_coverage": {
+    "posts": 48,
+    "with_merchant": 47,
+    "without_merchant": 1
+  },
+  "nonlink_post_review": {
+    "post": "usasalessearch/122",
+    "store_labels": [
+      "Магазин: Corsair Keyboards   📉   Ниже медианы наших наблюдений на 13%   🔥   М",
+      "Источник: Corsair Keyboards  ———————————————   📢   Ссылка для друзей:  @usasal"
+    ]
+  }
+}
