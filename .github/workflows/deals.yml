@@ -10,7 +10,7 @@ on:
       mode:
         description: "run = обычный запуск, smoke = проверить все источники (без публикации)"
         type: choice
-        options: [run, smoke]
+        options: [run, smoke, probe]
         default: run
       dry_run:
         description: "Тестовый запуск без отправки сообщений и без сохранения состояния"
@@ -27,7 +27,7 @@ on:
 
 concurrency:
   # Bir vaqtda faqat bitta tsikl. Navbatdagi cron tiklari avtomatik bekor qilinadi.
-  group: deals-bot
+  group: ${{ inputs.mode == 'probe' && 'deals-probe' || 'deals-bot' }}
   cancel-in-progress: false
 
 permissions:
@@ -36,6 +36,7 @@ permissions:
 
 jobs:
   run:
+    if: inputs.mode != 'probe'
     runs-on: ubuntu-latest
     # GitHub hosted runner limiti — 6 soat (360 daq). Tsikl 330 daq, qolgani push uchun.
     timeout-minutes: 350
@@ -197,3 +198,25 @@ jobs:
           done
           echo "::error::Failed to dispatch next run; cron remains the watchdog."
           exit 1
+
+  probe:
+    if: inputs.mode == 'probe'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    env:
+      DRY_RUN: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Probe endpoints without publication or state writes
+        run: python tools/probe.py --output probe-results.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: endpoint-probe-${{ github.run_id }}
+          path: probe-results.json
+          retention-days: 7
