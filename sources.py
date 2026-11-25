@@ -56,6 +56,7 @@ SOURCES = [
     Source("sd-hot", "Slickdeals Hot Deals", SD + "?searchin=first&forumchoice%5B%5D=9&rss=1"),
     *[_sd_search(t) for t in SEARCH_TERMS],
     *[_sd_search(t) for t in ("amazon", "micro center", "best buy", "b&h", "dell", "lenovo")],
+    _sd_search("newegg combo"),  # local smoke 2026-11-25: 200 / 25 RSS entries
     _sd_search("newegg"),  # runner probe 2026-11-25: HTTP 200, 25 RSS entries; unvetted
 
     # --- отключены до успешного smoke-теста (python bot.py --smoke) ---

@@ -45,8 +45,8 @@ RULES = {
 DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
-RULES_VERSION = 5
-PARSER_VERSION = 3
+RULES_VERSION = 6
+PARSER_VERSION = 4
 
 
 def env_int(name, default):
@@ -319,6 +319,13 @@ def make_deal(entry, source, now):
         else:
             pi.update(price=None, issue="invalid_store_price", original=None)
     cat = classify(rest, tag or entry.get("flair", ""))
+    store = source.name if source.type == 'store' else detect_store(rest)
+    primary = store_links.unwrap(entry.get('url'))
+    if not primary and entry.get('store_candidates'):
+        primary = store_links.unwrap(entry['store_candidates'][0])
+    combo = store_links.newegg_combo_id(primary) if store in ('', 'Newegg') else None
+    if combo:
+        cat, tag, store = 'combo', 'COMBO', 'Newegg'
     name = extract_name(rest, pi.get("first_price_pos"))
     asin_m = ASIN_RX.search(entry["url"] or "") or ASIN_RX.search(entry.get("summary", ""))
     asin = asin_m.group(1) if asin_m else None
@@ -335,7 +342,7 @@ def make_deal(entry, source, now):
         "price": pi["price"], "issue": pi["issue"], "original": pi["original"],
         "original_kind": pi["original_kind"], "price_kind": pi["price_kind"], "code": pi["code"],
         "flags": sorted(pi["flags"]), "cond": cond,
-        "store": source.name if source.type == "store" else detect_store(rest),
+        "store": store,
         "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
         "store_candidates": entry.get("store_candidates", []),
         "product_meta": entry.get("product_meta", {}) if source.type == "store" else {},
@@ -344,7 +351,7 @@ def make_deal(entry, source, now):
         "weight_kg": product_weight.kilograms((entry.get('product_meta') or {}).get('weight_kg'), 'kg') if source.type == 'store' else None,
         "image_url": product_images.image_url(entry.get("image_url")),
         "fetched_ts": now, "community_score": entry.get("community_score"), "expired": entry["expired"],
-        "asin": asin, "ident": f"asin:{asin}" if asin else "n:" + name_key(name),
+        "asin": asin, "ident": f"newegg-combo:{combo}" if combo else f"asin:{asin}" if asin else "n:" + name_key(name),
     }
 
 
@@ -472,7 +479,8 @@ def build_message(d, info):
     e = html.escape
     name = d["name"] if len(d["name"]) <= 180 else d["name"][:177] + "…"
     lines = [f"📦 <b>[{e(d['tag'] or d['cat'].upper())}] {e(name)}</b>", ""]
-    price_line = f"💰 Цена: <b>{fmt_price(d['price'])}</b>"
+    price_label = "Цена комплекта" if d["cat"] == "combo" else "Цена"
+    price_line = f"💰 {price_label}: <b>{fmt_price(d['price'])}</b>"
     if d["price_kind"] == "coupon":
         price_line += " (с купоном)"
     elif d["price_kind"] == "code":
@@ -481,8 +489,12 @@ def build_message(d, info):
         label = "MSRP" if d["original_kind"] == "MSRP" else "было"
         price_line += f" ({label} {fmt_price(info['claimed'])}, −{info['pct']:.0f}%)"
     lines.append(price_line)
+    if d['cat'] == 'combo':
+        lines.append('📦 Цена за весь комплект; состав и наличие уточняйте по ссылке')
     if info.get('aggregator_unverified'):
         lines.append('ℹ️ Цена из агрегатора, не проверена на странице Newegg')
+        if d.get('price_kind') in ('coupon', 'code'):
+            lines.append('ℹ️ Купон/промокод взят из агрегатора; проверьте его применение')
     weight = product_weight.display(d.get('weight_kg') or (d.get('product_meta') or {}).get('weight_kg'))
     lines.append('⚖️ Вес: ' + weight)
     direct = store_links.merchant_url(d.get("url"))
@@ -762,7 +774,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             elif market.raw_verified.get(aggregator_url) is not None:
                 ok = False
                 info['reason'] = 'карточка Newegg не подтверждает цену или условия'
-            elif d['trust'] in ('curated', 'community') and market_prices.purchase_conditions(d)['eligible']:
+            elif d['trust'] in ('curated', 'community') and market_prices.aggregator_conditions(d)['eligible']:
                 ok, info = assess(d, stats_h, cfg, now, aggregator_price=True)
                 info['aggregator_unverified'] = True
         community_blocked = (aggregator_url and d['trust'] == 'community' and
@@ -810,6 +822,26 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             stats['ждут прямой ссылки магазина'] += 1
             continue
         d['url'] = direct
+        if store_links.newegg_combo_id(direct):
+            # An opaque aggregator redirect may reveal the kit only at the last mile.
+            previous_hist_key = hist_key(d)
+            d.update(cat='combo', tag='COMBO', store='Newegg',
+                     ident='newegg-combo:' + store_links.newegg_combo_id(direct))
+            dk = dup_key(d)
+            if previous_hist_key != hist_key(d):
+                old_samples = hist.get(previous_hist_key, [])
+                old_samples[:] = [s for s in old_samples if not (s[0] == now and s[1] == d['price'] and
+                                  s[2] == d['id'] and len(s) > 3 and s[3] == d['source_id'])]
+                if offer_queue.history_eligible(d, now, cfg['max_age_h']):
+                    add_sample(hist.setdefault(hist_key(d), []), d, now)
+            if d.get('price_origin') == 'feed':
+                combo_ok, combo_info = assess(d, hist_stats(hist.get(hist_key(d), []), now, cfg['hist_days']),
+                                             cfg, now, aggregator_price=True)
+                if (not combo_ok or d['trust'] not in ('curated', 'community') or
+                        not market_prices.aggregator_conditions(d)['eligible']):
+                    defer(d, key, combo_info['reason'] or 'комплект: требуется подтверждение состава и полной цены')
+                    continue
+                info = dict(combo_info, aggregator_unverified=True)
         previous = publication_history.seen(state, d, dk)
         if previous:
             publication_history.remember(state, d, previous['at'], previous['lowest_cents'])
