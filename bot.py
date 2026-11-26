@@ -23,6 +23,7 @@ import product_weight
 import market_prices
 import market_search
 import checkpoints
+import offer_audit
 import cache_retention
 import offer_queue
 import publication_history
@@ -45,7 +46,7 @@ RULES = {
 DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
-RULES_VERSION = 6
+RULES_VERSION = 7
 PARSER_VERSION = 4
 
 
@@ -265,6 +266,23 @@ def classify(text, tag=""):
     t = (tag or "").strip().lower()
     if t in TAG_MAP:
         return TAG_MAP[t]
+    # Strong component nouns beat incidental system/compatibility wording.
+    normalized = re.sub(r'\s+', ' ', re.sub('[®™]', '', text))
+    if not looks_like_system(normalized):
+        if re.search(r'\bdesktop\s+processor\b', normalized, re.I):
+            return 'cpu'
+        if re.search(r'\b(?:SO[ -]?DIMM(?:\s+Laptop)?\s+(?:Memory|RAM)|Laptop\s+Memory)\b', normalized, re.I):
+            return 'ram'
+        drive = re.search(r'\b(?:portable|external)\s+(?:ssd|solid state drive)\b', normalized, re.I)
+        if drive and not re.search(r'enclosure|adapter|cable|case|cover', normalized[:drive.start()], re.I):
+            return 'ext_storage'
+        case = re.search(r'\b(?:pc|computer)\s+case\b(?!\s+fans?)|\b(?:mid|full|super|micro)[\s‐‑–—-]*tower\b', normalized, re.I)
+        primary = r'motherboard|graphics card|\bgpu\b|\brtx\b|geforce|radeon|\bryzen\b|core i[3579]|power supply|\bpsu\b|cpu cooler|replacement|dust filter'
+        if case and not re.search(primary, normalized[:case.start()], re.I):
+            return 'case'
+        fan = re.search(r'\b(?:PWM\s+(?:computer\s+case\s+)?fans?|UNI\s+FAN|triple\s+fans?)\b', normalized, re.I)
+        if fan and not re.search(primary+r'|pc case|computer case|[ -]tower', normalized[:fan.start()], re.I):
+            return 'cooler'
     for cat, rx in CLASSIFY_RX:
         if rx.search(text):
             return cat
@@ -671,10 +689,11 @@ def prune_history(hist, now, days):
 
 # ============================== основной цикл ==============================
 def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
-            image_resolver=None, market=None, details_resolver=None):
+            image_resolver=None, market=None, details_resolver=None, audit=None):
     """Durable outbox: save the whole work queue before the first external delivery."""
     if dry:
         state, hist, deals = copy.deepcopy(state), copy.deepcopy(hist), copy.deepcopy(deals)
+    emit = (lambda *args: None) if dry or audit is None else audit
     stats, per_src, waiting, fatal = Counter(), defaultdict(Counter), [], False
     save_state = (lambda s: None) if dry else (save_state or (lambda s: None))
     save_hist = (lambda h: None) if dry else (save_hist or (lambda h: None))
@@ -710,13 +729,16 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         stats['ждут'] += 1
         per_src[d['source_id']]['ждут'] += 1
         price = fmt_price(d['price']) if d.get('price') is not None else 'цена уточняется'
+        emit(d, status, reason)
         waiting.append(f"  • [{d['cat']}] {d['name'][:55]} — {price} ({d['source']}): {reason}")
 
     for d in deals:
         sid, key = d['source_id'], offer_queue.pkey(d)
         q = d['_queue']
         if q.get('retry_at', 0) > now:
+            emit(d, q.get('status', 'queued'), q.get('reason', 'retry scheduled'))
             continue
+        emit(d, 'evaluating', 'assessment in progress')
         q['status'] = 'processing'
         # Ambiguous feed prices get a chance to be resolved by the exact store page.
         if d['price'] is None and market:
@@ -740,6 +762,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
                 'parser_version': PARSER_VERSION, 'reason': reason, 'at': now, 'status': 'insufficient_data'}
             if d.get('published_ts') and now - d['published_ts'] > cfg['max_age_h'] * 3600:
                 pending.pop(key, None)
+                emit(d, 'rejected', 'offer older than configured age limit')
             else:
                 defer(d, key, reason, 300)
             continue
@@ -797,18 +820,21 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             publication_history.remember(state, d, previous['at'], previous['lowest_cents'])
             pending.pop(key, None)
             stats['повтор без снижения цены'] += 1
+            emit(d, 'duplicate', 'confirmed publication floor: no lower price')
             continue
         if not ok:
             if info['final']:
                 q.update(status='failed_permanently', reason=info['reason'])
                 pending.pop(key, None)
                 stats['отклонено окончательно'] += 1
+                emit(d, 'rejected', info['reason'])
             else:
                 defer(d, key, info['reason'], status='priority_verification' if info['priority_verification'] else 'queued')
             continue
         if stats['опубликовано'] >= cfg['max_posts']:
             q.update(status='queued', reason='лимит публикаций')
             stats['отложено лимитом'] += 1
+            emit(d, 'queued', 'publication limit reached')
             continue
         # Pin a verified offer; a secondary RSS link must never replace it.
         direct = (info.get('verified_offer') or {}).get('url') or (aggregator_url if info.get('aggregator_unverified') else None)
@@ -847,6 +873,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             publication_history.remember(state, d, previous['at'], previous['lowest_cents'])
             pending.pop(key, None)
             stats['повтор без снижения цены'] += 1
+            emit(d, 'duplicate', 'confirmed publication floor after link resolution')
             log(f"[DEDUP] {d['name'][:80]}: цена {fmt_price(d['price'])} уже публиковалась или выше прежней; повтор пропущен")
             continue
         if not dry and details_resolver and (not d.get('weight_kg') or not d.get('image_url')):
@@ -864,6 +891,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             continue
         q.update(status='sending', attempts=q.get('attempts', 0) + 1, retry_at=now + 60)
         save_state(state)
+        emit(d, 'sending', 'outbox saved; delivery not confirmed')
         try:
             receipt = send(msg, store_url=direct, photo_url=product_images.image_url(d.get('image_url')))
         except TelegramError as ex:
@@ -872,6 +900,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             if ex.permanent and not ex.fatal and not ex.ambiguous:
                 q.update(status='failed_permanently', reason=str(ex))
                 pending.pop(key, None)
+                emit(d, 'rejected', redact(ex))
             else:
                 defer(d, key, str(ex), delay=max(getattr(ex, 'retry_after', 0), min(3600, 60 * 2 ** min(q['attempts'] - 1, 5))),
                       status='delivery_unknown' if ex.ambiguous else 'queued')
@@ -890,11 +919,16 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         q.update(status='delivered', delivered_at=now)
         state['processed'][key], state['posted'][dk] = now, now
         publication_history.remember(state, d, now)
+        emit(d, 'published', 'Telegram send returned successfully')
         pending.pop(key, None)
         save_state(state)
         stats['опубликовано'] += 1
         per_src[sid]['опубликовано'] += 1
+    before_bound = list(pending.values())
     removed = offer_queue.bound_pending(pending)
+    for d in before_bound:
+        if offer_queue.pkey(d) not in pending:
+            emit(d, 'queue_evicted', d.get('_queue', {}).get('reason', 'pending size limit'))
     if removed:
         stats['вытеснено из очереди'] += removed
         log(f'[QUEUE] Вытеснено {removed} кандидатов; сохранено {len(pending)}, факты доставки сохранены')
@@ -981,11 +1015,20 @@ def main(argv=None):
         print("[ERROR] все источники недоступны")
         return 1
 
+    ledger = None if dry else offer_audit.Ledger(DATA / offer_audit.FILE, now, RULES_VERSION)
+    audit = (lambda *args: None) if ledger is None else (lambda d, decision, reason='': ledger.record(d, decision, redact(reason)))
+    for d in deals:
+        audit(d, 'not_evaluated', 'seen in feed; assessment not reached')
+
     # дубли одной и той же записи из разных лент/запросов одного источника
     uniq = {}
     for d in deals:
-        uniq.setdefault((d["id"], d["price"]), d)
+        if (d['id'], d['price']) in uniq:
+            audit(d, 'duplicate_in_batch', 'same listing id and price; another feed retained')
+        else:
+            uniq[(d['id'], d['price'])] = d
     deals = list(uniq.values())
+    if ledger: ledger.flush()
 
     ss = (lambda s: None) if dry else (lambda s: (trim_state(s, now, cfg), checkpoint_store.save(s, hist)))
     sh = lambda h: None  # Both parts are already committed by the same atomic checkpoint.
@@ -1001,8 +1044,9 @@ def main(argv=None):
                                       discoverer=market_search.discover)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               market=market, details_resolver=product_images.from_product_details)
+                                               market=market, details_resolver=product_images.from_product_details, audit=audit)
     finally:
+        if ledger: ledger.flush(final=True)
         ss(state)
         sh(hist)
     print_report(results, per_src, stats, waiting, hist)
