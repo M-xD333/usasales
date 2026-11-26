@@ -10,6 +10,7 @@ import tempfile
 import time
 import checkpoints
 import state_merge
+import offer_audit
 
 # Accept the existing ~28 MB legacy generation during migration; reject unbounded inputs.
 RECOVERY_MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -27,10 +28,10 @@ class RunnerGit:
         self.git("check-ref-format", "refs/heads/" + branch)
         self.remote = "refs/remotes/origin/" + branch
 
-    def git(self, *args, env=None, check=True):
+    def git(self, *args, env=None, check=True, binary=False):
         return subprocess.run(["git", *args], cwd=self.root,
                               env={**os.environ, **(env or {})}, check=check,
-                              text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+                              text=not binary, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
 
     def fetch(self):
         self.git("fetch", "--no-tags", "origin", "+refs/heads/" + self.branch + ":" + self.remote)
@@ -43,6 +44,13 @@ class RunnerGit:
         for path in sorted(data.rglob("*")) if data.exists() else []:
             if not path.is_file() or path.is_symlink() or path.suffix == ".tmp":
                 continue
+            if path.name == offer_audit.FILE:
+                try:
+                    if path.stat().st_size > offer_audit.MAX_BYTES: raise ValueError('audit size')
+                    offer_audit.decode(path.read_bytes())
+                except (OSError,ValueError,EOFError):
+                    print('[AUDIT] invalid local ledger skipped; checkpoint persistence continues.')
+                    continue
             value = path.read_bytes()
             if path.suffix == ".json" and not (has_bundle and path.name in
                     (checkpoints.FILE, checkpoints.BACKUP, 'state.json', 'history.json')):
@@ -74,6 +82,18 @@ class RunnerGit:
         return files
 
     def merge_remote_state(self, files, parent):
+        audit_name = 'data/' + offer_audit.FILE
+        size = self.git('cat-file', '-s', parent + ':' + audit_name, check=False)
+        if size.returncode == 0 and int(size.stdout.strip()) <= offer_audit.MAX_BYTES:
+            remote = self.git('show', parent + ':' + audit_name, check=False, binary=True)
+            if remote.returncode == 0:
+                try:
+                    offer_audit.decode(remote.stdout)
+                    files = dict(files)
+                    files[audit_name] = (offer_audit.merge_bytes(remote.stdout, files[audit_name])
+                                         if audit_name in files else remote.stdout)
+                except (OSError,ValueError,EOFError):
+                    print('[AUDIT] invalid remote ledger; checkpoint merge continues.')
         def read(ref, name):
             result = self.git('show', ref + ':data/' + name, check=False)
             return json.loads(result.stdout) if result.returncode == 0 else None
@@ -239,6 +259,17 @@ class RunnerGit:
                 store.load()
                 store.save(json.loads(recovered['data/state.json']), json.loads(recovered['data/history.json']))
                 recovered.pop('data/' + checkpoints.BACKUP, None)
+            audit_name = 'data/' + offer_audit.FILE
+            audit_path = Path(tmp) / offer_audit.FILE
+            if not audit_path.exists(): audit_path = Path(tmp) / 'data' / offer_audit.FILE
+            if audit_path.exists():
+                try:
+                    if audit_path.is_symlink() or audit_path.stat().st_size > offer_audit.MAX_BYTES:
+                        raise ValueError('audit recovery size')
+                    value = audit_path.read_bytes();offer_audit.decode(value)
+                    recovered[audit_name] = offer_audit.merge_bytes(local[audit_name], value) if audit_name in local else value
+                except (OSError,ValueError,EOFError):
+                    print('[AUDIT] optional recovery ledger unavailable; checkpoint recovery continues.')
             self.restore(recovered)
         print("Recovered newer state from " + latest["name"] + ".")
 

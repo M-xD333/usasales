@@ -195,6 +195,10 @@ class RunnerSyncTests(unittest.TestCase):
         self.assertEqual(json.loads(self.remote_file('data/history.json')), bundle['history'])
 
     def test_restore_artifact_with_only_atomic_bundle(self):
+        import offer_audit as A
+        import time
+        audit=A.Ledger(self.editor/'data'/A.FILE,time.time(),7)
+        audit.record({'source_id':'restored','id':'seen','url':'https://www.newegg.com/p/N82E16812345678'},'queued','evidence');audit.flush(final=True)
         artifact={'name':'deals-state-99','created_at':'2026-11-04T12:00:00Z',
                   'workflow_run':{'id':99,'head_branch':'main'}}
         bundle={'generation_id':10,'state':{'posted':{'delivered':5}},'history':{}}
@@ -205,6 +209,7 @@ class RunnerSyncTests(unittest.TestCase):
                 (target/'state.json').write_text('null')
                 (target/'history.json').write_text('interrupted')
                 (target/'checkpoint.backup.json').write_text('invalid')
+                (target/A.FILE).write_bytes(audit.path.read_bytes())
                 return ''
             return json.dumps({'artifacts':[artifact]} if 'artifacts' in args[-1] else [])
         with mock.patch.dict('os.environ',{'GITHUB_REPOSITORY':'test/repo'}), mock.patch('workflow_git.subprocess.check_output',side_effect=gh):
@@ -213,6 +218,7 @@ class RunnerSyncTests(unittest.TestCase):
         restored=C.Store(self.runner/'data');st,hist=restored.load()
         self.assertEqual(st['posted'],{'first':1,'delivered':5})
         self.assertGreater(restored.generation,10)
+        self.assertEqual(A.decode((self.runner/'data'/A.FILE).read_bytes())['rows'][0]['source'],'restored')
 
     def test_migration_archive_is_included_in_same_snapshot(self):
         import checkpoints as C
@@ -265,6 +271,22 @@ class RunnerSyncTests(unittest.TestCase):
         self.assertIn(Q.pkey(uncertain), merged['pending'])
         self.assertEqual(merged['posted'], remote['posted'])
         self.assertEqual(merged['publication_history'], remote['publication_history'])
+
+    def test_audit_concurrent_writers_survive_push_and_sync(self):
+        import offer_audit as A
+        import time
+        now=time.time()
+        def record(root,item):
+            ledger=A.Ledger(root/'data'/A.FILE,now,7)
+            ledger.record({'source_id':'test','id':item,'url':'https://www.amazon.com/dp/B012345678','price':50},'rejected','threshold')
+            ledger.flush(final=True)
+        record(self.editor,'remote');git(self.editor,'add','data/'+A.FILE)
+        git(self.editor,'commit','-m','remote audit');git(self.editor,'push','origin','main')
+        record(self.runner,'local');self.sync.push();self.sync.sync()
+        rows=A.decode((self.runner/'data'/A.FILE).read_bytes())['rows']
+        self.assertEqual(len(rows),2)
+        self.assertEqual(json.loads((self.runner/'data/state.json').read_text())['posted'],{'first':1})
+        self.assertLessEqual((self.runner/'data'/A.FILE).stat().st_size,A.MAX_BYTES)
 
 
 if __name__ == "__main__":
