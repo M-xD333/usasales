@@ -1,0 +1,36 @@
+{
+  "Items": [
+    {
+      "Categories": [
+        "HOME",
+        "TOOLS",
+        "HOME/Lighting & Fans",
+        "TOOLS/Lighting & Fans"
+      ],
+      "Condition": null,
+      "EndDate": "2018-10-10T05:00:00+00:00",
+      "ForumUrl": "https://forums.woot.com/t/24586",
+      "IsFeatured": false,
+      "IsFulfilledByAmazon": false,
+      "IsWootOff": false,
+      "IsSoldOut": true,
+      "IsAvailableOnMobileAppOnly": true,
+      "ListPrice": {
+        "Minimum": 49.99,
+        "Maximum": 49.99
+      },
+      "OfferId": "2a3deba2-6f5a-43df-875a-ea84709c9a30",
+      "Photo": "https://d3gqasl9vmjfd8.cloudfront.net/c14c0b0d-a363-4f5b-a116-5849ca37f4f5.jpg",
+      "SalePrice": {
+        "Minimum": 39.99,
+        "Maximum": 39.99
+      },
+      "StartDate": "2018-10-09T05:00:00+00:00",
+      "Subtitle": null,
+      "Title": "TP-Link Smart LED Light Bulb (2-Pack)",
+      "Url": "https://tools.woot.com/offers/tp-link-smart-led-light-bulb-2-pack-3"
+    }
+  ],
+  "MarketingName": "Tools & Garden",
+  "TotalPages": 1
+}
