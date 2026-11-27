@@ -1,0 +1,18 @@
+{
+  "rows": [
+    {
+      "url": "https://www.reddit.com/r/buildapcsales/.rss",
+      "http": 404,
+      "content_type": "application/atom+xml; charset=UTF-8",
+      "bytes": 266,
+      "elapsed_s": 0.584
+    },
+    {
+      "url": "https://old.reddit.com/r/buildapcsales/.rss",
+      "http": 302,
+      "content_type": "",
+      "bytes": 0,
+      "elapsed_s": 0.422
+    }
+  ]
+}
