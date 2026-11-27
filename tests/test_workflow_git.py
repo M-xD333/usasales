@@ -289,5 +289,27 @@ class RunnerSyncTests(unittest.TestCase):
         self.assertLessEqual((self.runner/'data'/A.FILE).stat().st_size,A.MAX_BYTES)
 
 
+    def test_weight_knowledge_concurrent_merge_and_corrupt_optional_snapshot(self):
+        import weight_knowledge as K
+        import product_weight as W
+        import time
+        now=time.time()
+        def remember(root,kind):
+            k=K.Knowledge(root/'data'/K.FILE,now)
+            d={'url':'https://www.amazon.com/dp/B012345678','title':'Pixel 10 Pro 256GB Black','cond':'New'}
+            W.apply(d,W.from_product_fields({'additionalProperty':[{'name':kind+' Weight','value':'1 kg'}]},d['url'],now));k.remember(d);k.save()
+        remember(self.editor,'Package');git(self.editor,'add','data/'+K.FILE)
+        git(self.editor,'commit','-m','weight evidence');git(self.editor,'push','origin','main')
+        remember(self.runner,'Item');self.sync.push();self.sync.sync()
+        rows=K.decode((self.runner/'data'/K.FILE).read_bytes())['rows']
+        self.assertTrue(rows)
+        self.assertTrue(all(row['weight_pkg_kg']==1 and row['weight_net_kg']==1 for row in rows.values()))
+        self.assertEqual(json.loads((self.runner/'data/state.json').read_text())['posted'],{'first':1})
+        (self.runner/'data'/K.FILE).write_bytes(b'corrupt')
+        files=self.sync.snapshot()
+        self.assertNotIn('data/'+K.FILE,files)
+        self.assertIn('data/state.json',files)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,623 @@
+{
+  "sampled_at": 1795760248.3168461,
+  "rows": [
+    {
+      "url": "https://www.amazon.com/dp/B0DKFMSMYK",
+      "category": "cpu",
+      "source_id": "amazon-components",
+      "title": "AMD RYZEN 7 9800X3D 8-Core, 16-Thread Desktop Processor",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0DKFMSMYK",
+        "at": 1795760238.6673222,
+        "bytes": 3781,
+        "sha256": "982f31380beb6d5dc2ac8b749f797ff3e54a2eb9d82825c2f0928ffd77bf885f",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B07TVK8WJP",
+      "category": "keyboard",
+      "source_id": "amazon-peripherals",
+      "title": "Gaming Keyboard and Mouse and Mouse pad and Gaming Headset, Wired LED RGB Backlight Bundle for PC Gamers and Xbox and PS4 Users - 4 in 1 Edition Hornet RX-250",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B07TVK8WJP",
+        "at": 1795760238.667975,
+        "bytes": 3781,
+        "sha256": "4d5225b7f3830eb6fe4a54227b3cfa48012b267d6083b42f56ff60ccc9e94c6c",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/gp/product/B0FQFB8FMG/ref=sw_img_1?smid=ATVPDKIKX0DER&psc=1",
+      "category": "headset",
+      "source_id": "techbargains",
+      "title": "Apple AirPods Pro 3 Active Noise Cancellation Wireless Earbuds $149.00",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0FQFB8FMG",
+        "at": 1795760239.241508,
+        "bytes": 3781,
+        "sha256": "b19ba57493712e2b876a614a0e027de4cc84072200145a4fa118470b98083914",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0CB9MSJ5N",
+      "category": "psu",
+      "source_id": "amazon-components",
+      "title": "MSI MAG A850GL PCIE5, Fully Modular Compact Gaming 850W Power Supply, 80+ Gold, ATX 3.1 & PCIe 5.1 Ready, Native Dual-Color 12V-2x6 Cable, 10 Year Warranty",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0CB9MSJ5N",
+        "at": 1795760239.242348,
+        "bytes": 3781,
+        "sha256": "0fa4ad9c14304de8b11e7e43fd579de606d9025d0561294d8a89481575e27d9b",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B08HYJLXJZ",
+      "category": "keyboard",
+      "source_id": "amazon-peripherals",
+      "title": "Gaming LED Keyboard Mouse Headset and Mousepad Bundle,Wired Rainbow",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B08HYJLXJZ",
+        "at": 1795760239.703389,
+        "bytes": 566869,
+        "sha256": "43913ca69c6a68b02b5e60d33862b65c43d247aff67350da3ee1fbd7647b265a",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/gp/product/B0DDQLGDY3/ref=ox_sc_act_title_1?smid=ATVPDKIKX0DER&th=1",
+      "category": "headset",
+      "source_id": "techbargains",
+      "title": "Beats Solo 4 Wireless On-Ear Bluetooth Headphones $99.95",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0DDQLGDY3",
+        "at": 1795760239.704802,
+        "bytes": 3781,
+        "sha256": "e0975698289d22e6079b84711fbc273d3d79a2026a8bdd1bfc0451ff9b77e80d",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0G8Z1CM77",
+      "category": "case",
+      "source_id": "amazon-components",
+      "title": "MUSETEX Y6 PC Case, Pre-Installed 7 Infinity Mirror PWM ARGB Fans, ATX Mid Tower Computer Case, Gaming PC Case with Type-C, 270° Full View Tempered Glass, Black",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0G8Z1CM77",
+        "at": 1795760240.155215,
+        "bytes": 3781,
+        "sha256": "09fe4f6ef2ac0d02f2a4dc67ff82aa473439861a9334b28bc0d5db9c31227494",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B08J3GK7NZ",
+      "category": "keyboard",
+      "source_id": "amazon-peripherals",
+      "title": "Gaming Keyboard and Mouse, Headset, Mouse Pad Combo, 10 RGB Backit Effects",
+      "route": "amazon.com",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B08J3GK7NZ",
+        "at": 1795760240.614593,
+        "bytes": 3781,
+        "sha256": "c6aba99cc1719a2271ed0a42a8a374c438c64044d0472e1059aad4aa118c70de",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/cpu-coolers/cw-9061045-ww/icue-link-titan-ii-360-rx-lcd-aio-liquid-cpu-cooler-cw-9061045-ww",
+      "category": "cooler",
+      "source_id": "corsair-cooling",
+      "title": "iCUE LINK TITAN II 360 RX LCD AIO Liquid CPU Cooler",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/gaming-headsets/ca-9011414-ww/hs80-v2-max-wireless-gaming-headset-ca-9011414-ww",
+      "category": "headset",
+      "source_id": "corsair-headsets",
+      "title": "HS80 v2 MAX Wireless Gaming Headset, Steel Gray",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/keyboards/ch-912a31i-na/galleon-100-sd-stream-deck-integrated-mechanical-keyboard-ch-912a31i-na",
+      "category": "keyboard",
+      "source_id": "corsair-keyboards",
+      "title": "GALLEON 100 SD Stream Deck-Integrated Mechanical Keyboard",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/memory/cmk64gx5m2a4800c40/vengeance-64gb-2x32gb-ddr5-dram-4800mhz-c40-memory-kit-black-cmk64gx5m2a4800c40",
+      "category": "ram",
+      "source_id": "corsair-memory",
+      "title": "VENGEANCE® 64GB (2x32GB) DDR5 DRAM Up To 4800MT/s CL40 Memory Kit — Black",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/gaming-mouse/ch-931g400-ww/sabre-v3-pro-purevector-ultralight-wireless-gaming-mouse-ch-931g400-ww",
+      "category": "mouse",
+      "source_id": "corsair-mice",
+      "title": "SABRE v3 PRO PureVector Ultralight Wireless Gaming Mouse",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/psu/cp-9020315-na/hx1000i-shift-crystal-fully-modular-high-performance-atx-power-supply-cp-9020315-na",
+      "category": "psu",
+      "source_id": "corsair-psu",
+      "title": "HX1000i SHIFT CRYSTAL Fully Modular High-Performance ATX Power Supply",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/cpu-coolers/cw-9061037-ww/icue-link-titan-ii-360-rx-rgb-aio-liquid-cpu-cooler-cw-9061037-ww",
+      "category": "cooler",
+      "source_id": "corsair-cooling",
+      "title": "iCUE LINK TITAN II 360 RX RGB AIO Liquid CPU Cooler",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/gaming-headsets/ca-9011370-na/virtuoso-pro-open-back-streaming-gaming-headset-carbon-ca-9011370-na",
+      "category": "headset",
+      "source_id": "corsair-headsets",
+      "title": "VIRTUOSO PRO Open Back Streaming/Gaming Headset - Carbon",
+      "route": "corsair.com",
+      "_sample": {
+        "http": null,
+        "reason": "ReadTimeout"
+      },
+      "weight_missing_reason": "network_error",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "network_error"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0GQF1NG5M",
+      "category": "minipc",
+      "source_id": "pcworld-deals",
+      "title": "Best Black Friday mini PC deals: Save big on tiny computers",
+      "route": "aggregator-linked",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0GQF1NG5M",
+        "at": 1795760245.913939,
+        "bytes": 3781,
+        "sha256": "c5ea5d09891f28f8fd6e572210025128cf1b5dde14761248cb638e5b99e6a58a",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0CH4NYL6J",
+      "category": "printer",
+      "source_id": "tomshardware",
+      "title": "Black Friday is the perfect time to pick up a new 3D Printer",
+      "route": "aggregator-linked",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0CH4NYL6J",
+        "at": 1795760246.1996531,
+        "bytes": 3781,
+        "sha256": "17f0b46289f7ef057ca9add3568d119c3ae8b851da991581a477a6a2d780e26c",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0G5Z5N274",
+      "category": "monitor",
+      "source_id": "pcworld-deals",
+      "title": "Best Black Friday monitor deals: The perfect PC upgrade for 2026",
+      "route": "aggregator-linked",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0G5Z5N274",
+        "at": 1795760246.372772,
+        "bytes": 3781,
+        "sha256": "bddb877b2f4a87764f340e07107fffe1295a0596ee438b1c6c724def1fd990d2",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B09XYYMJ9D",
+      "category": "networking",
+      "source_id": "bensbargains",
+      "title": "Kasa KS200M Smart WiFi Motion Sensor Switch  $17 at Amazon",
+      "route": "aggregator-linked",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B09XYYMJ9D",
+        "at": 1795760246.6605408,
+        "bytes": 827564,
+        "sha256": "c7387abdb66668e1b1c29674de61c09d4cc293dbfd0842c14757260eee4b7018",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0FS98L5XP",
+      "category": "ext_storage",
+      "source_id": "bensbargains",
+      "title": "Black Friday Memory, SSD & Flash Drives Sale  at Amazon",
+      "route": "aggregator-linked",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0FS98L5XP",
+        "at": 1795760246.826475,
+        "bytes": 816438,
+        "sha256": "26da7bf102c6d5a1c840aa8ded1e9db0a591979bd20017c52f506b5854cab707",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0CNTTVVN6",
+      "category": "laptop",
+      "source_id": "pcworld-deals",
+      "title": "Best Black Friday Thunderbolt dock deals: Your laptop deserves more ports",
+      "route": "aggregator-linked",
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "_sample": {
+        "http": 200,
+        "source_url": "https://www.amazon.com/dp/B0CNTTVVN6",
+        "at": 1795760247.830038,
+        "bytes": 3781,
+        "sha256": "b91e581559b1ea56a98cbbb385c9492ea29ca4a110cf644f365b031847b58f93",
+        "fragments": [],
+        "before_net_kg": null
+      },
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "no_explicit_weight_with_units"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/corsair-rs360-ii-argb-unified-frame-pwm-fans-black/J39TSC9SX9/sku/6687438",
+      "category": "cooler",
+      "title": "Best Buy [$44.99, $10/18.19% off]: CORSAIR — RS360 II ARGB Unified Frame PWM Fans — Black",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/corsair-rs360-ii-argb-unified-frame-pwm-fans-black/J39TSC9SX9/sku/6687438",
+        "at": 1795760331.8123572
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/montech-tg3-atx-mid-tower-argb-fans-strip-tempered-glass-rtx-5090-support-tg3b-black/C34KSQQPPV",
+      "category": "case",
+      "title": "Best Buy [$64.99, $14.91/18.66% off]: Montech — TG3 ATX Mid Tower, ARGB Fans and Strip, Tempered Glass, RTX 5090 Support (TG3B) — Black",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/montech-tg3-atx-mid-tower-argb-fans-strip-tempered-glass-rtx-5090-support-tg3b-black/C34KSQQPPV",
+        "at": 1795760331.812918
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/gigabyte-x870e-eagle-x3d-wf7-socket-am5-amd-atx-ddr5-motherboard-black/J3ZW9X7QFK",
+      "category": "mobo",
+      "title": "Best Buy [$259.98, $60/18.75% off]: GIGABYTE — X870E EAGLE X3D WF7 (Socket AM5) AMD ATX DDR5 Motherboard — Black",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/gigabyte-x870e-eagle-x3d-wf7-socket-am5-amd-atx-ddr5-motherboard-black/J3ZW9X7QFK",
+        "at": 1795760332.683865
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/asus-tuf-gaming-z890-plus-wifi-socket-lga-1851-intel-z890-atx-ddr5-wi-fi-7-motherboard-black/JJGGLQW58Z/sku/6601255/openbox?condition=excellent",
+      "category": "mobo",
+      "title": "Best Buy [$245.99]: ASUS — TUF GAMING Z890-PLUS WIFI (Socket LGA 1851) Intel Z890 ATX DDR5 Wi-Fi 7 Motherboard — Black",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/asus-tuf-gaming-z890-plus-wifi-socket-lga-1851-intel-z890-atx-ddr5-wi-fi-7-motherboard-black/JJGGLQW58Z/sku/6601255/openbox?condition=excellent",
+        "at": 1795760332.731327
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/asus-tuf-gaming-b850m-plus-socket-am5-amd-b850-micro-atx-wi-fi-7-be-motherboard-white/JJGHGPYTFC",
+      "category": "mobo",
+      "title": "Best Buy [$189.99, $70/26.92% off]: ASUS — TUF Gaming B850M-PLUS (Socket AM5) AMD B850 Micro-ATX Wi-Fi 7 BE Motherboard — White",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/asus-tuf-gaming-b850m-plus-socket-am5-amd-b850-micro-atx-wi-fi-7-be-motherboard-white/JJGHGPYTFC",
+        "at": 1795760333.4799051
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/amd-ryzen-7-7700x-8-core-16-thread-4-5ghz-5-4-ghz-max-boost-socket-am5-pci-express-5-0-unlocked-desktop-processor-silver/JXKQHH52C2/sku/12326212",
+      "category": "cpu",
+      "title": "Best Buy [$196.49, $203.50/50.88% off]: AMD — Refurbished Excellent — Ryzen 7 7700X 8-Core — 16-Thread 4.5GHz (5.4 GHz Max Boost) Socket AM5 PCI Express 5.0 Unlocked Desktop Processor ...",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/amd-ryzen-7-7700x-8-core-16-thread-4-5ghz-5-4-ghz-max-boost-socket-am5-pci-express-5-0-unlocked-desktop-processor-silver/JXKQHH52C2/sku/12326212",
+        "at": 1795760333.481345
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/fractal-design-pop-xl-air-eatx-atx-microatx-mini-itx-rgb-black-chassis-tempered-glass-clear-tint-mid-tower-pc-case-black/J36XJSZQZ9",
+      "category": "case",
+      "title": "Best Buy [$89.99, $30/25.00% off]: Fractal Design — Pop XL Air EATX, ATX, microATX, Mini-ITX RGB Black Chassis Tempered Glass Clear Tint Mid Tower PC Case — Black",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/fractal-design-pop-xl-air-eatx-atx-microatx-mini-itx-rgb-black-chassis-tempered-glass-clear-tint-mid-tower-pc-case-black/J36XJSZQZ9",
+        "at": 1795760334.374091
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    },
+    {
+      "url": "https://www.bestbuy.com/product/asus-rog-strix-x870e-e-gaming-wifi-socket-am5-amd-x870-atx-ddr5-wi-fi-7-motherboard-black/JJGGLQHLHT",
+      "category": "mobo",
+      "title": "Best Buy [$370.98, $69.11/15.70% off]: ASUS — ROG STRIX X870E-E GAMING WIFI (Socket AM5) AMD X870 ATX DDR5 Wi-Fi 7 Motherboard — Black",
+      "source_id": "pcpartsdrop",
+      "route": "bestbuy.com",
+      "_sample": {
+        "http": 403,
+        "source_url": "https://www.bestbuy.com/product/asus-rog-strix-x870e-e-gaming-wifi-socket-am5-amd-x870-atx-ddr5-wi-fi-7-motherboard-black/JJGGLQHLHT",
+        "at": 1795760334.375892
+      },
+      "weight_missing_reason": "HTTP 403",
+      "weight_status": {
+        "found": false,
+        "source": "",
+        "kind": "unknown",
+        "missing_reason": "HTTP 403"
+      }
+    }
+  ]
+}
