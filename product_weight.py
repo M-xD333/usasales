@@ -128,6 +128,10 @@ def _fields(observations, source, at=None):
 def from_product_fields(product, source='', at=None):
     observations=[]
     if not isinstance(product,dict):return {}
+    types=product.get('@type')
+    group=types=='ProductGroup' or isinstance(types,list) and 'ProductGroup' in types
+    if 'hasVariant' in product or 'isVariantOf' in product or group:
+        return {'weight_missing_reason':'ambiguous_variants'}
     if product.get('weight') is not None:observations.append(('net',kilograms(product['weight']),'Product.weight'))
     properties=product.get('additionalProperty',[])
     if isinstance(properties,dict):properties=[properties]
@@ -151,7 +155,7 @@ def extract(markup, base, at=None):
         parts=urlsplit(urljoin(base,url));return parts.hostname,parts.path.rstrip('/'),parts.query
     exact=[p for p in items if isinstance(p.get('url'),str) and identity(p['url'])==identity(base)]
     # Variant groups have no safe page-global specification scope, even with one exact child URL.
-    if len(items)>1 or any(p.get('hasVariant') or p.get('isVariantOf') for p in items):
+    if len(items)>1 or any('hasVariant' in p or 'isVariantOf' in p for p in items):
         return {'weight_missing_reason':'ambiguous_variants'}
     if items and not (exact or len(items)==1 and not items[0].get('url')):
         return {'weight_missing_reason':'product_identity_mismatch'}

@@ -51,7 +51,7 @@ DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
 RULES_VERSION = 8
-PARSER_VERSION = 6
+PARSER_VERSION = 7
 
 
 def env_int(name, default):

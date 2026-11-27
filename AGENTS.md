@@ -75,3 +75,6 @@
 
 
 Шаг10: Discord — только OFF-дизайн, docs/discord-signal-design.md. Follow разрешённого announcement в свой сервер, собственный bot token и минимальные права, только сигнал→проверка магазина; никакого копирования постов. После каждого зелёного CI владелец разрешил squash merge без повторного подтверждения. Три подряд сбойных прохода/сломанный пост→git revert кода без force-push/reset фактов. proof4 требует реального нового поста/правки, не fixtures; пока нет события — pending.
+
+
+Финальная регрессия O4: ProductGroup/hasVariant/isVariantOf в прямом каталоге не передают parent-weight в пакет или net. Правило уже действовало для целого HTML и теперь одинаково для source product_meta и кеша. PARSER_VERSION=7, RULES_VERSION=8; tests/test_variant_weight_safety.py. Не меняет price/publication floors.
