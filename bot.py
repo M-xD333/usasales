@@ -23,6 +23,7 @@ import product_weight
 import weight_knowledge
 import weight_lookup
 import runtime_info
+import weight_edits
 import market_prices
 import market_search
 import checkpoints
@@ -699,7 +700,7 @@ def prune_history(hist, now, days):
 
 # ============================== основной цикл ==============================
 def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
-            image_resolver=None, market=None, details_resolver=None, audit=None, weight_reader=None):
+            image_resolver=None, market=None, details_resolver=None, audit=None, weight_reader=None, post_observer=None):
     """Durable outbox: save the whole work queue before the first external delivery."""
     if dry:
         state, hist, deals = copy.deepcopy(state), copy.deepcopy(hist), copy.deepcopy(deals)
@@ -929,6 +930,9 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             if stats['ошибки отправки'] >= 2:
                 break
             continue
+        if post_observer:
+            try:post_observer(d,msg,receipt)
+            except Exception:log('[WEIGHT EDIT] optional capture failed; publication facts unaffected')
         if isinstance(receipt, dict) and isinstance(receipt.get('result'), dict):
             result = receipt['result']
             kind = 'photo' if result.get('photo') else 'text'
@@ -1038,6 +1042,9 @@ def main(argv=None):
 
     knowledge = None if dry else weight_knowledge.Knowledge(DATA / weight_knowledge.FILE, now)
     weights = None if dry else weight_lookup.Lookup(knowledge)
+    edits = None if dry else weight_edits.Registry(DATA / weight_edits.FILE,now)
+    if edits:
+        for record in edits.pending():weights.request(record['product'])
     for d in deals:
         if knowledge: knowledge.remember(d)
     ledger = None if dry else offer_audit.Ledger(DATA / offer_audit.FILE, now, RULES_VERSION)
@@ -1070,7 +1077,8 @@ def main(argv=None):
                                       discoverer=market_search.discover)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               market=market, weight_reader=weights, audit=audit)
+                                               market=market, weight_reader=weights, audit=audit, post_observer=edits.observe if edits else None)
+        if edits:edits.apply_ready(weights,os.getenv("TG_BOT_TOKEN"))
     finally:
         if weights: weights.close()
         if ledger: ledger.flush(final=True)
