@@ -696,3 +696,6 @@ Smoke не публикует и не сохраняет состояние, н�
 
 
 Шаг 4: Best Buy от curated/community агрегатора может публиковаться с явной пометкой непроверенной цены при недоступной карточке. Только основной URL/явный store+товарный кандидат, не вторичная ссылка roundup. Реальные community votes/пороги и явное противоречие магазина сохраняют силу; unvetted Best Buy не получает fast path. Best Buy403 не обходится, никакого API. RULES_VERSION=8. Замер до изменения: в сохранённых pending и audit0 доказуемо атрибутированных Best Buy; непрозрачные ссылки не считаются Best Buy наугад. Регрессии test_bestbuy_aggregator.
+
+
+Шаг 5: tools/feed_probe.py — один GET на каждый из6 Tom US/UK/news и Slickdeals RSS endpoint, только отдельный GH read-only job. Никаких обходов, редиректов или выдуманных голосов; фиксируются entry_keys/реальные score-поля, новости не заменяются до доказанного parseable US deals feed. Тесты test_feed_probe.
