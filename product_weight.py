@@ -98,7 +98,7 @@ PKG_LABELS = {'shipping weight', 'package weight', 'weight (with packaging)',
               'weight with packaging', 'gross weight', 'packaged weight'}
 NET_LABELS = {'item weight', 'product weight', 'net weight', 'weight (without packaging)'}
 WEIGHT_FIELDS = ('weight_pkg_kg','weight_net_kg','weight_pkg_provenance','weight_net_provenance',
-                 'weight_sum_kg','weight_sum_provenance','weight_estimate_kg','weight_missing_reason','weight_components')
+                 'weight_sum_kg','weight_sum_provenance','weight_estimate_kg','weight_missing_reason','weight_components','weight_estimate_range_kg','weight_estimate_basis')
 
 
 def field_kind(label):
@@ -213,11 +213,28 @@ def prepare(deal, estimates=None):
                 deal['weight_sum_kg']=sum(known)
                 deal['weight_sum_provenance']={'source':'components','field':'sum; not measured parcel','ts':time.time()}
             else:deal['weight_missing_reason']='bundle_components_incomplete'
-    enabled=os.getenv('WEIGHT_ESTIMATES','0')=='1' if estimates is None else estimates
-    if enabled and not bundle(deal) and not any(deal.get('weight_'+k+'_kg') for k in ('pkg','net','sum')):
-        estimate={'mouse':.3,'keyboard':1.5,'headset':.7,'cpu':.2,'ram':.2,'ssd':.2}.get(deal.get('cat'))
-        if estimate:deal['weight_estimate_kg']=estimate
-    elif not enabled:deal.pop('weight_estimate_kg',None)
+    enabled=os.getenv('WEIGHT_ESTIMATES','1')=='1' if estimates is None else estimates
+    measured=any(deal.get('weight_'+k+'_kg') for k in ('pkg','net','sum'))
+    deal.pop('weight_estimate_kg',None)
+    if not enabled or measured:
+        deal.pop('weight_estimate_range_kg',None);deal.pop('weight_estimate_basis',None)
+    elif bundle(deal):
+        ranges=[]
+        for part in deal.get('weight_components',[]):
+            prepare(part,estimates=True)
+            measured_part=next((part.get('weight_'+k+'_kg') for k in ('pkg','net','sum') if part.get('weight_'+k+'_kg')),None)
+            bounds=[measured_part,measured_part] if measured_part else part.get('weight_estimate_range_kg')
+            qty=part.get('quantity',1)
+            if not bounds or type(qty)!=int or not 0<qty<=100:ranges=[];break
+            ranges.append([bounds[0]*qty,bounds[1]*qty])
+        if ranges:
+            deal['weight_estimate_range_kg']=[sum(r[0] for r in ranges),sum(r[1] for r in ranges)]
+            deal['weight_estimate_basis']={'version':'estimate_v1','kind':'component_sum','samples':0}
+        else:
+            deal.pop('weight_estimate_range_kg',None);deal.pop('weight_estimate_basis',None)
+    elif not deal.get('weight_estimate_range_kg'):
+        import weight_estimates
+        deal.update(weight_estimates.estimate(deal.get('cat')))
     return deal
 
 
@@ -235,8 +252,11 @@ def display_deal(deal):
     prepare(deal)
     for kind,label in (('pkg','с упаковкой'),('net','без упаковки')):
         if kilograms(deal.get('weight_'+kind+'_kg'),'kg'):return display(deal['weight_'+kind+'_kg'])+' ('+label+')'
-    if kilograms(deal.get('weight_sum_kg'),'kg'):return '≈ '+display(deal['weight_sum_kg'])+' (сумма комплектующих)'
-    if kilograms(deal.get('weight_estimate_kg'),'kg'):return '≈ '+display(deal['weight_estimate_kg'])+' (оценка)'
+    if kilograms(deal.get('weight_sum_kg'),'kg'):return '≈ сумма: '+display(deal['weight_sum_kg'])+' (комплектующие)'
+    bounds=deal.get('weight_estimate_range_kg')
+    if bounds:
+        value='-'.join(f'{x:.4f}'.rstrip('0').rstrip('.') for x in bounds)+' кг'
+        return ('≈ сумма: '+value+' (оценка по комплектующим)') if (deal.get('weight_estimate_basis') or {}).get('kind')=='component_sum' else '≈ '+value+' (оценка по категории)'
     return 'не указан'
 
 
@@ -249,6 +269,11 @@ def validate(deal):
                 raise ValueError('missing weight provenance')
             ts=provenance.get('ts')
             if isinstance(ts,bool) or not isinstance(ts,(int,float)) or not math.isfinite(ts):raise ValueError('invalid weight timestamp')
+    bounds=deal.get('weight_estimate_range_kg')
+    if bounds is not None:
+        if not isinstance(bounds,list) or len(bounds)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) or v<=0 for v in bounds) or bounds[0]>bounds[1]:raise ValueError('invalid estimate range')
+        basis=deal.get('weight_estimate_basis')
+        if not isinstance(basis,dict) or basis.get('version')!='estimate_v1' or basis.get('kind') not in ('category','component_sum') or type(basis.get('samples'))!=int:raise ValueError('invalid estimate basis')
     components=deal.get('weight_components')
     if components is not None:
         if not isinstance(components,list) or len(components)>30:raise ValueError('invalid weight components')

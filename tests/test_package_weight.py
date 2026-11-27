@@ -49,8 +49,8 @@ def test_ambiguous_unitless_conflicting_and_variants_stay_unknown():
 
 
 @pytest.mark.parametrize('case,expected',[
- ('pkg','1 кг (с упаковкой)'),('net','0.5 кг (без упаковки)'),('none','не указан'),
- ('bundle_all','≈ 1.5 кг (сумма комплектующих)'),('bundle_partial','не указан')])
+ ('pkg','1 кг (с упаковкой)'),('net','0.5 кг (без упаковки)'),('none','≈ 0.05-0.3 кг (оценка по категории)'),
+ ('bundle_all','≈ сумма: 1.5 кг (комплектующие)'),('bundle_partial','не указан')])
 def test_dry_run_five_cases_and_photo_fallback(case,expected):
     d=approved()
     if case=='pkg':W.apply(d,fields('1 kg','500 g'))
@@ -66,10 +66,10 @@ def test_dry_run_five_cases_and_photo_fallback(case,expected):
     assert 'Вес: '+expected in bot.photo_caption(bot.build_message(d,info),d['url'])['caption']
 
 
-def test_estimates_off_by_default_and_explicitly_labelled(monkeypatch):
+def test_estimates_on_by_owner_decision_and_explicitly_labelled(monkeypatch):
     monkeypatch.delenv('WEIGHT_ESTIMATES',raising=False);d=dict(approved(),cat='mouse')
-    assert W.display_deal(d)=='не указан'
-    monkeypatch.setenv('WEIGHT_ESTIMATES','1');assert W.display_deal(d)=='≈ 0.3 кг (оценка)'
+    assert W.display_deal(d)=='≈ 0.1-0.5 кг (оценка по категории)'
+    monkeypatch.setenv('WEIGHT_ESTIMATES','1');assert W.display_deal(d)=='≈ 0.1-0.5 кг (оценка по категории)'
     assert not W.status(d)['found'] # Estimates never inflate measured coverage.
     monkeypatch.setenv('WEIGHT_ESTIMATES','0');assert W.display_deal(d)=='не указан'
 
@@ -119,7 +119,7 @@ def test_lookup_hard_deadline_and_publication_never_waits():
     send=Mock();start=time.monotonic()
     bot.process([approved()],state(),{},NOW,cfg(),send,details_resolver=hung)
     assert time.monotonic()-start<1;send.assert_called_once()
-    assert 'Вес: не указан' in send.call_args.args[0]
+    assert 'Вес: ≈ 0.05-0.3 кг (оценка по категории)' in send.call_args.args[0]
 
 
 def test_state_validate_restart_merge_and_weight_audit(tmp_path):
@@ -182,7 +182,7 @@ def test_corrupt_optional_knowledge_never_blocks_mock_publication_or_existing_fl
     protected={'lowest_cents':100,'at':1,'identities':[]};st['publication_history']={'unrelated':copy.deepcopy(protected)}
     send=Mock();bot.process([approved()],st,{},NOW,cfg(),send,weight_reader=lookup)
     lookup.close();send.assert_called_once()
-    assert 'Вес: не указан' in send.call_args.args[0]
+    assert 'Вес: ≈ 0.05-0.3 кг (оценка по категории)' in send.call_args.args[0]
     assert st['publication_history']['unrelated']==protected and path.read_bytes()==b'not gzip'
 
 

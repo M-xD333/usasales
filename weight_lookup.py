@@ -71,6 +71,8 @@ class Lookup:
             values.update(ready)
             if self.knowledge:
                 product=dict(deal);W.apply(product,values);self.knowledge.remember(product)
+        if self.knowledge and not any(values.get('weight_'+k+'_kg') for k in ('pkg','net')):
+            values.update(self.knowledge.estimate(deal))
         if not values:values={'weight_missing_reason':'lookup_pending_or_budget_exhausted'}
         return values
     def close(self):
