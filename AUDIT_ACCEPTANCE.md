@@ -83,3 +83,8 @@ API и редактирование отправленных постов — д
 
 
 Шаг7 Woot: официальный бесплатный Developer API, header x-api-key, feed/Computers и feed/Electronics. woot_api.fetch без WOOT_API_KEY не выполняет запрос. Адаптер не зарегистрирован в publishing loop; включение после ключа требует scheduler>=900с/2feeds (<=192/день при квоте1000). Диапазоны вариантов/App-only сохраняются как неоднозначные кандидаты, не минимальная цена. HTTP429 не повторять, ключ не логировать. Официальный пример fixtures/woot, тесты test_woot_api; подробности docs/woot-api-design.md.
+
+
+Шаг8: UPCitemdb только /prod/trial, без ключей/оплаты. Probe до20 товаров, batch2, sequential lookup>=10.2с, search>=31с, максимум25 запросов, stop429/исчерпание. Старые pending не содержат GTIN: выборка получена из бесплатного поиска брендов, не объявляется покрытием текущих офферов бота. Поле weight без package/net семантики не заносится в измеренный package/net кеш. Код не активирует runtime fallback; результат станет основанием решения. Тесты test_upc_free_probe.
+
+Результат шага8: GH #45956781056, 20/20 продуктов,12/20 с weight+unit, package/net вид не определён→0 подтверждённых pkg/net.14 запросов200,429нет. Runtime fallback не активировать по generic weight; docs/upc-weight-coverage.md.
