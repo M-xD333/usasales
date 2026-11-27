@@ -56,6 +56,8 @@ SOURCES = [
     Source("sd-hot", "Slickdeals Hot Deals", SD + "?searchin=first&forumchoice%5B%5D=9&rss=1"),
     *[_sd_search(t) for t in SEARCH_TERMS],
     *[_sd_search(t) for t in ("amazon", "micro center", "best buy", "b&h", "dell", "lenovo")],
+    _sd_search("computer parts"),  # GH probe: 200/25; unvetted, реальные votes отсутствуют
+    _sd_search("pc components"),  # GH probe: 200/25
     _sd_search("newegg combo"),  # local smoke 2026-11-25: 200 / 25 RSS entries
     _sd_search("newegg"),  # runner probe 2026-11-25: HTTP 200, 25 RSS entries; unvetted
 
@@ -68,8 +70,8 @@ SOURCES = [
     Source("pcworld", "PCWorld", "http://www.pcworld.com/index.rss", trust="editorial", enabled=False),
     Source("pcworld-deals", "PCWorld Deals", "https://www.pcworld.com/deals/feed", trust="editorial", enabled=False,
            note="smoke 2026-11-03: HTTP 200, но содержимое совпало с pcworld (дубль), статьи; не включать"),
-    Source("tomshardware", "Tom's Hardware", "https://www.tomshardware.com/feeds.xml", trust="editorial",
-           enabled=False, publish=False, note="вспомогательный сигнал, не публикуется"),
+    Source("tomshardware", "Tom's Hardware", "https://www.tomshardware.com/feeds/articletype/deals", trust="editorial",
+           enabled=False, publish=True, note="GH probe: US deals RSS 200/50; только точные товарные предложения, не новости"),
     Source("dealnews-computers", "DealNews Computers", "https://www.dealnews.com/c39/Computers/?rss=1",
            trust="curated", enabled=False,
            note="условия DealNews: не менять содержимое/ссылки, обязательная атрибуция. Включать только осознанно"),

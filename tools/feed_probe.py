@@ -24,7 +24,7 @@ def inspect(name,url,session=requests):
         if r.status_code!=200:return out
         parsed=feedparser.parse(r.content);out['entries']=len(parsed.entries)
         out['bozo']=bool(parsed.get('bozo'));out['entry_keys']=sorted({k for e in parsed.entries for k in e.keys()})
-        out['score_fields']=[{k:str(v)[:80] for k,v in e.items() if re.search(r'thumb|vote|score|rating',k,re.I)} for e in parsed.entries if any(re.search(r'thumb|vote|score|rating',k,re.I) for k in e)]
+        out['score_fields']=[{k:str(v)[:80] for k,v in e.items() if re.search(r'(?<![a-z])(?:thumbs?(?:up|down)?|votes?|score|rating)(?![a-z])',k,re.I)} for e in parsed.entries if any(re.search(r'(?<![a-z])(?:thumbs?(?:up|down)?|votes?|score|rating)(?![a-z])',k,re.I) for k in e)]
         out['sample']=[{'title':e.get('title','')[:280],'link':e.get('link',''),'published':e.get('published','')} for e in parsed.entries[:8]]
     except requests.RequestException as ex:out['error']=type(ex).__name__
     finally:out['elapsed_s']=round(time.monotonic()-start,3)
