@@ -27,6 +27,8 @@ def coverage(doc):
         for dim,key in [('store',row.get('store','unknown')),('category',row.get('category','unknown'))]:
             c=groups[(dim,key)];c['seen']+=1
             if status is None:c['unmeasured']+=1
+            elif status.get('source')=='components' and status.get('missing_reason','').startswith('component_sum'):
+                c['derived_sum']+=1
             else:
                 c['measured']+=1;c[status.get('kind','unknown') if status.get('found') else 'missing']+=1
     return {'rows':len(doc['rows']),'offers':len(latest),'started_at':doc.get('started_at'),'truncated_before':doc.get('truncated_before'),

@@ -721,3 +721,6 @@ Smoke не публикует и не сохраняет состояние, н�
 
 
 Финальная регрессия O4: ProductGroup/hasVariant/isVariantOf в прямом каталоге не передают parent-weight в пакет или net. Правило уже действовало для целого HTML и теперь одинаково для source product_meta и кеша. PARSER_VERSION=7, RULES_VERSION=8; tests/test_variant_weight_safety.py. Не меняет price/publication floors.
+
+
+Уточнение измерения O4: вычисленная сумма компонентов не является измеренным net/package всего товара. weight_status для суммы source=components,kind=unknown,found=false; coverage считает derived_sum отдельно, включая старые строки с этим reason. Ни формат поста, ни кеш package/net, ни floors не меняются; regression test_derived_sum_is_not_measured_net_or_package.
