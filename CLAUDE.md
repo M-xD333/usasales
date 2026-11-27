@@ -701,3 +701,6 @@ Smoke не публикует и не сохраняет состояние, н�
 Шаг 5: tools/feed_probe.py — один GET на каждый из6 Tom US/UK/news и Slickdeals RSS endpoint, только отдельный GH read-only job. Никаких обходов, редиректов или выдуманных голосов; фиксируются entry_keys/реальные score-поля, новости не заменяются до доказанного parseable US deals feed. Тесты test_feed_probe.
 
 Результат шага5, GH #45955886357: Tom US deals RSS200/50, UK200/50, news200/50. Источник tomshardware заменён на US deals (editorial, publish=True), существующий ENABLE_SOURCES сохраняется. SD computer parts / pc components / frontpage200/25; добавлены первые2 unvetted поисковые ленты. Реальный headlinefixture и was/now (synthetic) проверяют цены; «cents per GB» не превращаются в общую цену. media_thumbnail не является thumb score.
+
+
+Шаг6 остановлен по результату измерения: Slickdeals RSS0/75 entries с реальным score/thumb/vote. Ничего не маппировать и не менять пороги; media_thumbnail — не голоса. Подробности docs/slickdeals-score-2026-11-27.md, regression test_feed_probe.test_thumbnails_are_not_real_community_votes.
