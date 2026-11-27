@@ -1,0 +1,918 @@
+{
+  "rows": [
+    {
+      "name": "tom-us",
+      "url": "https://www.tomshardware.com/feeds/articletype/deals",
+      "http": 200,
+      "content_type": "application/xml",
+      "bytes": 2509120,
+      "entries": 50,
+      "bozo": false,
+      "entry_keys": [
+        "author",
+        "author_detail",
+        "authors",
+        "cf_hasaffiliatelinks",
+        "cf_ispaid",
+        "cf_issponsored",
+        "content",
+        "contributors",
+        "credit",
+        "dc_content",
+        "dc_source",
+        "guidislink",
+        "href",
+        "id",
+        "link",
+        "links",
+        "media_content",
+        "media_credit",
+        "media_text",
+        "media_thumbnail",
+        "published",
+        "published_parsed",
+        "summary",
+        "summary_detail",
+        "tags",
+        "title",
+        "title_detail",
+        "updated",
+        "updated_parsed"
+      ],
+      "score_fields": [
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/gtA4L8AgreNnEb9XFRicAP-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/GDyN7qC6MfiwUMBSHpMjB5-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/RX4pMDu9we8B2mHkiEBxM5-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/de2b6qcEat9sVFWwoidbQZ-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/ZGGZR3k7yxaZm44LU3cVYc-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/usEaEkdJt4o9maSY9rwxNW-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/3A5uF6VGh8xbmVBwg7QuGC-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/WPPY6sJNhG44W7XqU9Gkb8-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/k4AKviAvaLVH4RtZZTPrdc-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/gdS8B7MtcRAvqXsgY3zExM-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/eMXAFFZVnP56vjMJ2GGKfM-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/eoNxVhPoaPoJ6K6CbaywHX-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/g2t9uSVsG8dCSmdLjpixLo-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/MNE2XXPkMkFy37pUZfJoYm-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/VzJVi9zGqjqiYhWmeKVHPG-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/FoFXUu2LwvmzpRb2cfASF4-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/pSKF6r6gC6ML2MScQtQzhU-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/q8yzJroxxfh5XVQoHLgebN-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/2VuqdkYEo4eHVEPiVCE6CK-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/qg7bhVAYsRCi4GAT4h8Xyj-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/yTrcpQi6UyoVD9s68zZe5f-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/BAV3GMBwrrLNLSkEmYEbLi-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/QiPCaQpAET2HgXhu3mYFCR-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/DsVpjYxXd8ckKFn5txkzzA-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/sRFGL8XtiMGf2KpND49w55-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/psHEmPVcpayrV46ijHZQGS-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/cDdAVfBEF8rdht4Djt4TbQ-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/WQriGt25Vt5SRi8Xbn7KwJ-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/8zcLL6e9F4zn59dDuQXkqF-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/XqSr2HVpJS99JzhHZfjtPf-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/qhLpuNkQALKv38i7QGPAqb-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/nYFobev3Mi39srr8cuu8HF-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/EFmd4zw7NGtUgp9oMfGvvn-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/SuWvQA39fMCqtsKpdiDo4P-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/zUKkpzrNjmEmdMxuvXGZRR-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/aiCE4SUBa5i2RfFxXdKRNU-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/kH4igqKSVcu3DjKZdupbFY-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/azVkseF5DhXF5sKhZU3zin-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/n75sAsMdD4VcBHkWdg9v2j-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/paYdFcbNCwHVUFnUbT4u48-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/LQiHKy3Y2GvWSf8LV4sVP9-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/9KAxfWoNa52BD8XErSz36Y-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/NRTXxvuAfwFe4HMz89iTa6-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/mcxs4jUyfSNcSwPakjqbbf-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/AFirDiGgKALmA7hskdb7rS-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/bSwWjABMoimdeRQQdwBjkE-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/ADsE4q4BtLKBCuPbxTLb5L-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/jt7K3mRTk52ZZk9VAsNL8G-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/DLbEbYUKqh3de6npgDhrZi-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/sE9m8A5hkrdWUTFuR42ZEA-1920-80.png'}"
+        }
+      ],
+      "sample": [
+        {
+          "title": "Black Friday is the perfect time to pick up a new 3D Printer",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/black-friday-is-the-perfect-time-to-pick-up-a-new-3d-printer-these-are-the-best-deals-weve-spotted-so-far",
+          "published": "Thu, 26 Nov 2026 19:30:00 +0000"
+        },
+        {
+          "title": "The best Black Friday soldering iron deals for hobbyists and makers right now",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/the-best-black-friday-soldering-iron-deals-for-hobbyists-and-makers-right-now-limited-time-sale-discounts-on-digital-irons-premium-solder-and-heat-proof-accessories",
+          "published": "Thu, 26 Nov 2026 18:30:00 +0000"
+        },
+        {
+          "title": "Essential 3D printer maintenance tool deals for Black Friday — save up to 30% on precision tools, lights, snips, and more",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/essential-3d-printer-maintenance-tool-deals-for-black-friday-save-up-to-30-percent-on-precision-tools-lights-snips-and-more",
+          "published": "Thu, 26 Nov 2026 17:30:00 +0000"
+        },
+        {
+          "title": "13 tech bargains for only $13 or less to upgrade your desktop PC setup",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/13-tech-bargains-for-just-usd13-or-less-to-upgrade-your-pc-setup-must-own-gadgets-and-impulse-buys-to-solve-everyday-problems-from-network-switches-to-cleaning-kits",
+          "published": "Thu, 26 Nov 2026 16:30:00 +0000"
+        },
+        {
+          "title": "Save 21% on this ultra-fast 2TB SanDisk Optimus GX Pro 8100 SSD, now just 17.5 cents per GB",
+          "link": "https://www.tomshardware.com/pc-components/ssds/save-21-percent-on-this-ultra-fast-2tb-sandisk-optimus-gx-pro-8100-ssd-now-just-17-5-cents-per-gb-rebranded-sn8100-offers-gen-5-speeds-of-up-to-14-900-mb-s-at-a-record-low-price",
+          "published": "Thu, 26 Nov 2026 15:52:52 +0000"
+        },
+        {
+          "title": "Best Black Friday RAM deals 2026",
+          "link": "https://www.tomshardware.com/pc-components/ram/best-ram-memory-deals-ddr5-ddr4-2026",
+          "published": "Thu, 26 Nov 2026 14:57:07 +0000"
+        },
+        {
+          "title": "Best Black Friday Wi-Fi router deals 2026",
+          "link": "https://www.tomshardware.com/networking/routers/best-wi-fi-router-deals-2026",
+          "published": "Thu, 26 Nov 2026 14:23:51 +0000"
+        },
+        {
+          "title": "Get an RTX 5060 gaming PC with DDR5 for just $1,141",
+          "link": "https://www.tomshardware.com/desktops/gaming-pcs/get-an-rtx-5060-gaming-pc-with-ddr5-for-just-usd1-141-intel-core-i5-14400f-build-is-one-of-the-most-solid-budget-options-weve-seen",
+          "published": "Thu, 26 Nov 2026 14:19:17 +0000"
+        }
+      ],
+      "elapsed_s": 1.099
+    },
+    {
+      "name": "tom-uk",
+      "url": "https://www.tomshardware.com/uk/feeds/articletype/deals",
+      "http": 200,
+      "content_type": "application/xml",
+      "bytes": 1382133,
+      "entries": 50,
+      "bozo": false,
+      "entry_keys": [
+        "author",
+        "author_detail",
+        "authors",
+        "cf_hasaffiliatelinks",
+        "cf_ispaid",
+        "cf_issponsored",
+        "content",
+        "contributors",
+        "credit",
+        "dc_content",
+        "dc_source",
+        "guidislink",
+        "href",
+        "id",
+        "link",
+        "links",
+        "media_content",
+        "media_credit",
+        "media_text",
+        "media_thumbnail",
+        "published",
+        "published_parsed",
+        "summary",
+        "summary_detail",
+        "tags",
+        "title",
+        "title_detail",
+        "updated",
+        "updated_parsed"
+      ],
+      "score_fields": [
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/q8yzJroxxfh5XVQoHLgebN-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/XqSr2HVpJS99JzhHZfjtPf-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/paYdFcbNCwHVUFnUbT4u48-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/9KAxfWoNa52BD8XErSz36Y-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/bSwWjABMoimdeRQQdwBjkE-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/jt7K3mRTk52ZZk9VAsNL8G-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/sE9m8A5hkrdWUTFuR42ZEA-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/kbnZrASYje3B6GAvhTYukR-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/Np8dGX96dv5JrwJWonJvhB-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/LXcTF2GNBqrdL762hbKyn6-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/UTVYgAgrmiW4oPuuxDS6r4-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/QaujXDYa8T6Kr3g9q3qrqj-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/LXLjTM5FE8AzDz9tQLDuen-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/B8iJAjCazGNCp3tax2zkkE-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/rpwJVmwML4E2MEpxpkc42k-1920-80.webp'"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/GBz7H4LzTCxzvpx4qrw87a-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/fm38XocRNGEDZX9wamoJMZ-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/UkiE6BT2cgUNmaU9yovapV-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/XX9Q4oYs6r8HYSRgBmMz9M-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/tfgCo2ga3AwivPsys9RGWe-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/q6G9MjuQQB9BXxVyjDmcR8-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/tCnAnNT9UBbH3QxQmuTooF-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/jN7XEXGBELAeNSKRfSBuEX-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/NkBXTS9oXqjQdcsmDCwoG6-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/MQGPVULPnY2QkseBj4k6MV-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/zfaVZyvTGVtrTgnKcd8YxB-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/iLKvTVGrGQU7AtcrHkWgdi-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/8HLKfu4hHrMoYN2N6a8avX-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/iEEaNkJ9GHDbHbRzQGNsHa-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/G3kYfkRRXCb5LLbw6m666T-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/Eb4vKxx7inr4urgZM6LW6j-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/Diutgp6k7jPb8dybE3LgjA-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/QcpJW9tPq7s7mHEWcuADcW-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/UNujem5yH7GWce7WHeMar5-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/b6Yexe2y9qta8KpCPdKq9F-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/FgTvRtKy2Cci9Lia3d5qCb-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/99L7KygEaksCTGFQv3Y9hh-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/BdLaDTZx4UFpLAwzP4FC9K-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/ZszqgCuC3fWgvZw5Z2JQeU-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/RuiMzYFFgRoZt69AmBqe65-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/C2RXLgzeNSriMuKn25crjH-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/LXLjTM5FE8AzDz9tQLDuen-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/QKhCR6w8LWfNyYZwDhJbrd-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/JK4cx33ccJVeqD29yCUSBS-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/u7NNVHRAq9CzD7mjKfQXH5-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/NxizhxvJZF9JDRSHJMKD5o-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/UqdjLgVzSmZmSzzkaoe2uT-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/vRRVSSWuYLcw8FeKxRZQDW-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/mE5ThKa5idLbHkSSUEr8s-1920-80.png'}]"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/vRRVSSWuYLcw8FeKxRZQDW-1920-80.png'}"
+        }
+      ],
+      "sample": [
+        {
+          "title": "Best USB charger and power bank deals 2026",
+          "link": "https://www.tomshardware.com/peripherals/usb/best-usb-charger-and-power-bank-deals-for-black-friday-2026-from-tiny-single-port-smartphone-chargers-to-large-power-banks-for-laptops-weve-found-the-best-deals",
+          "published": "Wed, 25 Nov 2026 21:05:22 +0000"
+        },
+        {
+          "title": "Deep clean your PC in seconds with cordless duster deals from $19",
+          "link": "https://www.tomshardware.com/peripherals/deep-clean-your-pc-in-seconds-with-cordless-air-duster-deals-from-usd19-on-black-friday-save-hundreds-on-canned-air-with-unlimited-high-rpm-dusting-power",
+          "published": "Wed, 25 Nov 2026 13:58:19 +0000"
+        },
+        {
+          "title": "RTX 5090-equipped Asus ROG Strix SCAR 16 laptop is $350 off",
+          "link": "https://www.tomshardware.com/pc-components/rtx-5090-equipped-asus-rog-strix-scar-16-laptop-is-usd350-off-snag-a-great-deal-on-a-ridiculously-powerful-2025-model-16-inch-gaming-laptop-with-32gb-of-ram-and-core-ultra-9-275hx-processor-for-only-usd4-149",
+          "published": "Tue, 24 Nov 2026 19:30:00 +0000"
+        },
+        {
+          "title": "Legendary Cooler Master Hyper 212 Halo CPU air cooler drops to an all-time low of $15  — keep your AMD or Intel processor running cool on the cheap",
+          "link": "https://www.tomshardware.com/pc-components/air-cooling/legendary-cooler-master-hyper-212-halo-cpu-air-cooler-drops-to-an-all-time-low-of-usd15-keep-your-amd-or-intel-processor-running-cool-on-the-cheap",
+          "published": "Tue, 24 Nov 2026 18:53:17 +0000"
+        },
+        {
+          "title": "These four 27-inch OLED 240 Hz QHD gaming monitors are stellar deals at less than $300",
+          "link": "https://www.tomshardware.com/monitors/gaming-monitors/these-four-27-inch-oled-240-hz-qhd-gaming-monitors-are-stellar-deals-at-less-than-usd300-acer-aoc-gigabyte-and-innocn-rock-qd-oled-and-woled-panels",
+          "published": "Tue, 24 Nov 2026 17:00:00 +0000"
+        },
+        {
+          "title": "Dell XPS 13 hits all-time low $549 for Black Friday",
+          "link": "https://www.tomshardware.com/laptops/dell-xps-13-hits-all-time-low-usd549-for-black-friday-dell-continues-to-challenge-macbook-neo",
+          "published": "Tue, 24 Nov 2026 16:17:46 +0000"
+        },
+        {
+          "title": "The cheapest 32GB DDR5-6000 RAM kit on the market is on sale for only $439",
+          "link": "https://www.tomshardware.com/pc-components/ddr5/the-cheapest-32gb-ddr5-6000-ram-kit-on-the-market-is-on-sale-for-only-usd439-teams-32gb-ddr5-6000-cl38-t-force-delta-rgb-ram-kit-is-usd110-off-with-promo-code-no-bundle-deals-needed",
+          "published": "Tue, 24 Nov 2026 14:13:31 +0000"
+        },
+        {
+          "title": "Grab a TP-Link tri-band Wi-Fi 7 router for less than $90",
+          "link": "https://www.tomshardware.com/networking/routers/grab-a-speedy-tp-link-tri-band-wi-fi-7-router-for-less-than-usd90-archer-be9500-router-is-55-percent-off-sports-10-gbe-wan-and-two-2-5-gbe-lan-ports",
+          "published": "Mon, 23 Nov 2026 22:00:00 +0000"
+        }
+      ],
+      "elapsed_s": 1.637
+    },
+    {
+      "name": "tom-news",
+      "url": "https://www.tomshardware.com/feeds.xml",
+      "http": 200,
+      "content_type": "application/xml",
+      "bytes": 2498358,
+      "entries": 50,
+      "bozo": false,
+      "entry_keys": [
+        "author",
+        "author_detail",
+        "authors",
+        "cf_hasaffiliatelinks",
+        "cf_ispaid",
+        "cf_issponsored",
+        "content",
+        "credit",
+        "dc_content",
+        "dc_source",
+        "guidislink",
+        "href",
+        "id",
+        "link",
+        "links",
+        "media_content",
+        "media_credit",
+        "media_text",
+        "media_thumbnail",
+        "published",
+        "published_parsed",
+        "summary",
+        "summary_detail",
+        "tags",
+        "title",
+        "title_detail",
+        "updated",
+        "updated_parsed"
+      ],
+      "score_fields": [
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/aZJHGMtqjVa6sqKsQJuGBB-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/gtA4L8AgreNnEb9XFRicAP-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/GDyN7qC6MfiwUMBSHpMjB5-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/TVYovaCvDrBoMvxiTPWqLL-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/RX4pMDu9we8B2mHkiEBxM5-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/V58pCYCTU9ChhLRLiLHMe5-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/de2b6qcEat9sVFWwoidbQZ-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/pU95E8pwfvrx8dWfwg7X8M-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/YAxQQsbvwDfFaHJ7zGMocj-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/veeGtgCPJNgJzwffWHN9h5-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/ZGGZR3k7yxaZm44LU3cVYc-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/pF3Uj9kaxgEJBUgDtvnX9m-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/WcZdaLvkZNZ5yCZw3YraBo-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/usEaEkdJt4o9maSY9rwxNW-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/nJR7ommFqeMLe557vRkri-1920-80.jpg'}]"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/3A5uF6VGh8xbmVBwg7QuGC-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/WPPY6sJNhG44W7XqU9Gkb8-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/RFis5f5faDsjup7Ws7gFb9-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/k4AKviAvaLVH4RtZZTPrdc-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/KFXbEZLy2LVoL3V9Rb6AdV-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/6vTk3xJGhojSU7NNDcyECo-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/YAQU3zRSbuCHbUYm5L4oD4-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/TMUte2TB7mThSYVgWPKiQL-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/gdS8B7MtcRAvqXsgY3zExM-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/iPmrEtNmpAx79TNibeBMXb-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/eMXAFFZVnP56vjMJ2GGKfM-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/EfmcPs77xttGfyKmrkSKU5-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/eoNxVhPoaPoJ6K6CbaywHX-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/MtvzW6bzjpUC6wKfyCAg8-1920-80.jpg'}]"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/xUdpMqnyvLoDXTGT2W4QpX-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/g2t9uSVsG8dCSmdLjpixLo-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/MNE2XXPkMkFy37pUZfJoYm-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/bFquN6uoLSdU7ixVFCoRTb-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/VzJVi9zGqjqiYhWmeKVHPG-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/FoFXUu2LwvmzpRb2cfASF4-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/pSKF6r6gC6ML2MScQtQzhU-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/LvzzCmtJd89Gi5SbhDaP6o-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/q8yzJroxxfh5XVQoHLgebN-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/2VuqdkYEo4eHVEPiVCE6CK-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/3VUDhTYYDLmHbVLRhcwPz4-1920-80.png'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/qg7bhVAYsRCi4GAT4h8Xyj-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/yTrcpQi6UyoVD9s68zZe5f-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/BAV3GMBwrrLNLSkEmYEbLi-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/QiPCaQpAET2HgXhu3mYFCR-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/DsVpjYxXd8ckKFn5txkzzA-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/sRFGL8XtiMGf2KpND49w55-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/psHEmPVcpayrV46ijHZQGS-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/DNfvQJUHCpDduHS9HATa3N-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/cDdAVfBEF8rdht4Djt4TbQ-1920-80.jpg'}"
+        },
+        {
+          "media_thumbnail": "[{'url': 'https://cdn.mos.cms.futurecdn.net/WQriGt25Vt5SRi8Xbn7KwJ-1920-80.jpg'}"
+        }
+      ],
+      "sample": [
+        {
+          "title": "Denny’s touts renewed support for Nvidia CEO Jensen Huang following reinstatement",
+          "link": "https://www.tomshardware.com/tech-industry/big-tech/dennys-touts-renewed-support-for-nvidia-ceo-jensen-huang-following-reinstatement-says-some-things-you-just-dont-take-off-the-menu",
+          "published": "Thu, 26 Nov 2026 21:00:00 +0000"
+        },
+        {
+          "title": "Black Friday is the perfect time to pick up a new 3D Printer",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/black-friday-is-the-perfect-time-to-pick-up-a-new-3d-printer-these-are-the-best-deals-weve-spotted-so-far",
+          "published": "Thu, 26 Nov 2026 19:30:00 +0000"
+        },
+        {
+          "title": "The best Black Friday soldering iron deals for hobbyists and makers right now",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/the-best-black-friday-soldering-iron-deals-for-hobbyists-and-makers-right-now-limited-time-sale-discounts-on-digital-irons-premium-solder-and-heat-proof-accessories",
+          "published": "Thu, 26 Nov 2026 18:30:00 +0000"
+        },
+        {
+          "title": "Two Californian Nvidia AI chip customers are really Chinese-owned",
+          "link": "https://www.tomshardware.com/tech-industry/big-tech/two-californian-nvidia-ai-chip-customers-are-really-chinese-owned-companies-used-as-workaround-for-government-export-controls",
+          "published": "Thu, 26 Nov 2026 18:00:00 +0000"
+        },
+        {
+          "title": "Essential 3D printer maintenance tool deals for Black Friday — save up to 30% on precision tools, lights, snips, and more",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/essential-3d-printer-maintenance-tool-deals-for-black-friday-save-up-to-30-percent-on-precision-tools-lights-snips-and-more",
+          "published": "Thu, 26 Nov 2026 17:30:00 +0000"
+        },
+        {
+          "title": "Credit rating agency puts Nvidia on notice for possible downgrade",
+          "link": "https://www.tomshardware.com/tech-industry/credit-rating-agency-puts-nvidia-on-notice-for-possible-downgrade-s-and-p-global-ratings-says-board-members-may-have-compromised-their-independence",
+          "published": "Thu, 26 Nov 2026 17:00:00 +0000"
+        },
+        {
+          "title": "13 tech bargains for only $13 or less to upgrade your desktop PC setup",
+          "link": "https://www.tomshardware.com/gift-guides-seasonal-sales/13-tech-bargains-for-just-usd13-or-less-to-upgrade-your-pc-setup-must-own-gadgets-and-impulse-buys-to-solve-everyday-problems-from-network-switches-to-cleaning-kits",
+          "published": "Thu, 26 Nov 2026 16:30:00 +0000"
+        },
+        {
+          "title": "Electronics manufacturers set up memory 'war rooms' to find, lock in DRAM supplies amid worst shortage in history",
+          "link": "https://www.tomshardware.com/pc-components/dram/electronics-manufacturers-set-up-memory-war-rooms-to-find-lock-in-dram-supplies-amid-worst-shortage-in-history-employees-scour-ebay-contact-hundreds-of-brokers-and-snap-up-even-small-batches-of-just-5-to-12-units",
+          "published": "Thu, 26 Nov 2026 16:11:07 +0000"
+        }
+      ],
+      "elapsed_s": 0.867
+    },
+    {
+      "name": "sd-parts",
+      "url": "https://slickdeals.net/newsearch.php?rss=1&q=computer+parts&searcharea=deals&searchin=first&isUserSearch=1",
+      "http": 200,
+      "content_type": "text/xml; charset=UTF-8",
+      "bytes": 73093,
+      "entries": 25,
+      "bozo": false,
+      "entry_keys": [
+        "author",
+        "author_detail",
+        "authors",
+        "content",
+        "guidislink",
+        "id",
+        "link",
+        "links",
+        "published",
+        "published_parsed",
+        "summary",
+        "summary_detail",
+        "tags",
+        "title",
+        "title_detail"
+      ],
+      "score_fields": [],
+      "sample": [
+        {
+          "title": "[Central Computers] Black Friday Doorbusters: Ryzen 7 9800X3D CPU $300, Ryzen 5 5600 CPU $79.99, ASUS RX 9070 XT GPU $800 & More (Mostly In-Store Only)",
+          "link": "https://slickdeals.net/f/20411196-central-computers-black-friday-doorbusters-ryzen-7-9800x3d-cpu-300-ryzen-5-5600-cpu-79-99-asus-rx-9070-xt-gpu-800-more-mostly-in-store-only?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Fri, 27 Nov 2026 04:02:05 +0000"
+        },
+        {
+          "title": "Apple Mac Studio (M5 Max 18-Core CPU 64GB Memory 2TB Solid State Drive 40-Core GPU) $3999",
+          "link": "https://slickdeals.net/f/20403555-apple-mac-studio-m5-max-18-core-cpu-64gb-memory-2tb-solid-state-drive-40-core-gpu-3999?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 26 Nov 2026 11:59:24 +0000"
+        },
+        {
+          "title": "1800 Watt EcoFlow Delta 3 Classic + Magnetic Charging Power Bank $299.98",
+          "link": "https://slickdeals.net/f/20385732-1800-watt-ecoflow-delta-3-classic-magnetic-charging-power-bank-299-98?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Tue, 24 Nov 2026 12:23:36 +0000"
+        },
+        {
+          "title": "Creality Pika 3D Scanner (Used w/ 1-YR Warranty) $471.20 + Free S&H",
+          "link": "https://slickdeals.net/f/20376654-creality-pika-3d-scanner-used-w-1-yr-warranty-471-20-free-s-h?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Mon, 23 Nov 2026 13:09:42 +0000"
+        },
+        {
+          "title": "AMD Ryzen 5 9600X, MSI PRO B850-S, Team T-Force Delta Alpha RGB 16GB DDR5, MSI SPATIUM M470 PRO 1TB + MSI MAG Coreliquid A13 240 Black $599.89",
+          "link": "https://slickdeals.net/f/20376297-amd-ryzen-5-9600x-msi-pro-b850-s-team-t-force-delta-alpha-rgb-16gb-ddr5-msi-spatium-m470-pro-1tb-msi-mag-coreliquid-a13-240-black-599-89?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Mon, 23 Nov 2026 12:13:45 +0000"
+        },
+        {
+          "title": "HP OmniBook 3 17.3 inch Laptop, Intel Core 5 120U, 8 GB RAM, 512 GB SSD @ Amazon $499.99",
+          "link": "https://slickdeals.net/f/20356398-hp-omnibook-3-17-3-inch-laptop-intel-core-5-120u-8-gb-ram-512-gb-ssd-amazon-499-99?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Fri, 20 Nov 2026 13:56:15 +0000"
+        },
+        {
+          "title": "AMD Ryzen 7 7800X3D, ASUS B650E Max Gaming WiFi AM5, G.Skill Flare X5 Series 32GB DDR5-6000 Kit, Computer Build Bundle $699.99",
+          "link": "https://slickdeals.net/f/20346885-amd-ryzen-7-7800x3d-asus-b650e-max-gaming-wifi-am5-g-skill-flare-x5-series-32gb-ddr5-6000-kit-computer-build-bundle-699-99?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 19 Nov 2026 16:44:36 +0000"
+        },
+        {
+          "title": "AMD Ryzen 9 9950X3D, ASUS ROG STRIX X870E-E, DDR5 32GB DDR5, SAMSUNG 990 PRO 2TB SSD, MSI MAG Coreliquid A13 240 Black - AIO $1399.99",
+          "link": "https://slickdeals.net/f/20344674-amd-ryzen-9-9950x3d-asus-rog-strix-x870e-e-ddr5-32gb-ddr5-samsung-990-pro-2tb-ssd-msi-mag-coreliquid-a13-240-black-aio-1399-99?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 19 Nov 2026 13:56:36 +0000"
+        }
+      ],
+      "elapsed_s": 1.021
+    },
+    {
+      "name": "sd-components",
+      "url": "https://slickdeals.net/newsearch.php?rss=1&q=pc+components&searcharea=deals&searchin=first&isUserSearch=1",
+      "http": 200,
+      "content_type": "text/xml; charset=UTF-8",
+      "bytes": 87937,
+      "entries": 25,
+      "bozo": false,
+      "entry_keys": [
+        "author",
+        "author_detail",
+        "authors",
+        "content",
+        "guidislink",
+        "id",
+        "link",
+        "links",
+        "published",
+        "published_parsed",
+        "summary",
+        "summary_detail",
+        "tags",
+        "title",
+        "title_detail"
+      ],
+      "score_fields": [],
+      "sample": [
+        {
+          "title": "Razer Katana 850W 80+ Platinum Modular aRGB Power Supply $94.44 at Amazon",
+          "link": "https://slickdeals.net/f/20408523-razer-katana-850w-80-platinum-modular-argb-power-supply-94-44-at-amazon?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 26 Nov 2026 20:59:52 +0000"
+        },
+        {
+          "title": "Flashforge Adventurer 5M DIY 3D Printer Enclosure Kit $27.99 + Free Shipping w/ Prime or on $35+",
+          "link": "https://slickdeals.net/f/20403213-flashforge-adventurer-5m-diy-3d-printer-enclosure-kit-27-99-free-shipping-w-prime-or-on-35?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 26 Nov 2026 10:42:04 +0000"
+        },
+        {
+          "title": "Amazon - Compressed Air Duster, 150000RPM, 4-Speed Electric Air Duster - $19.99",
+          "link": "https://slickdeals.net/f/20394804-amazon-compressed-air-duster-150000rpm-4-speed-electric-air-duster-19-99?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Wed, 25 Nov 2026 14:54:26 +0000"
+        },
+        {
+          "title": "TRYX FLOVA White Mid-Tower ATX PC Case $51.99 - Woot!",
+          "link": "https://slickdeals.net/f/20387991-tryx-flova-white-mid-tower-atx-pc-case-51-99-woot?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Tue, 24 Nov 2026 17:06:34 +0000"
+        },
+        {
+          "title": "Creality Pika 3D Scanner (Used w/ 1-YR Warranty) $471.20 + Free S&H",
+          "link": "https://slickdeals.net/f/20376654-creality-pika-3d-scanner-used-w-1-yr-warranty-471-20-free-s-h?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Mon, 23 Nov 2026 13:09:42 +0000"
+        },
+        {
+          "title": "Flashforge 3D Printer Enclosure Kit: AD5X $36.75, Adventurer 5M $30",
+          "link": "https://slickdeals.net/f/20362803-flashforge-3d-printer-enclosure-kit-ad5x-36-75-adventurer-5m-30?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Sat, 21 Nov 2026 11:03:32 +0000"
+        },
+        {
+          "title": "Turtle Beach - Victrix Pro BFG Reloaded Wireless Modular Controller for Windows & Steam Deck - Gray 109.99 at Best Buy $109.99",
+          "link": "https://slickdeals.net/f/20345232-turtle-beach-victrix-pro-bfg-reloaded-wireless-modular-controller-for-windows-steam-deck-gray-109-99-at-best-buy-109-99?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 19 Nov 2026 14:35:58 +0000"
+        },
+        {
+          "title": "ASUS TUF Gaming GT502 ATX Mid Tower Gaming PC Case $134.99",
+          "link": "https://slickdeals.net/f/20342799-asus-tuf-gaming-gt502-atx-mid-tower-gaming-pc-case-134-99?utm_source=rss&utm_content=def&utm_medium=RSS2",
+          "published": "Thu, 19 Nov 2026 11:17:23 +0000"
+        }
+      ],
+      "elapsed_s": 1.099
+    },
+    {
+      "name": "sd-frontpage",
+      "url": "https://slickdeals.net/newsearch.php?mode=frontpage&rss=1&searcharea=deals&searchin=first&q=computer+parts",
+      "http": 200,
+      "content_type": "text/xml; charset=UTF-8",
+      "bytes": 65504,
+      "entries": 25,
+      "bozo": false,
+      "entry_keys": [
+        "author",
+        "author_detail",
+        "authors",
+        "content",
+        "guidislink",
+        "id",
+        "link",
+        "links",
+        "published",
+        "published_parsed",
+        "summary",
+        "summary_detail",
+        "tags",
+        "title",
+        "title_detail"
+      ],
+      "score_fields": [],
+      "sample": [
+        {
+          "title": "Used w/ 1-Yr Warranty: Creality Pika 3D Scanner $471.20 + Free S&H",
+          "link": "https://slickdeals.net/f/20376654-creality-pika-3d-scanner-used-w-1-yr-warranty-471-20-free-s-h?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Tue, 24 Nov 2026 18:47:26 +0000"
+        },
+        {
+          "title": "Cert. Refurb: EcoFlow 2048Wh 2400W LFP Portable DELTA 3 Max Power Station $659 + Free S&H",
+          "link": "https://slickdeals.net/f/20337855-cert-refurb-ecoflow-2048wh-2400w-lfp-portable-delta-3-max-power-station-659-free-s-h?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Thu, 19 Nov 2026 10:43:50 +0000"
+        },
+        {
+          "title": "Select Stores: Open Box Excellent: Samsung HW-B650F 3.1-Ch Soundbar w/ Sub (2025) $150 & More + Free Pickup (Limited Stock)",
+          "link": "https://slickdeals.net/f/20301864-samsung-b-series-hw-b650f-3-1-ch-dts-virtual-x-soundbar-open-box-excellent-149-99?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Sat, 14 Nov 2026 18:49:39 +0000"
+        },
+        {
+          "title": "Ryzen 5 5600X CPU, 16GB T-Force Delta RGB DDR4, GIGABYTE B550 EAGLE Mobo $299 + $6 S&H",
+          "link": "https://slickdeals.net/f/20287074-bundle-amd-ryzen-5-5600x-cpu-gigabyte-b550-eagle-wifi-6-mb-16gb-ddr4-3200-ram-more-299-5-99-shipping?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Wed, 11 Nov 2026 03:42:47 +0000"
+        },
+        {
+          "title": "Used w/ 1-Yr Warranty: Creality Pika 3D Scanner $479.20 + Free S&H",
+          "link": "https://slickdeals.net/f/20278422-used-w-1-yr-warranty-creality-pika-3d-scanner-481-60-free-s-h?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Thu, 12 Nov 2026 19:25:35 +0000"
+        },
+        {
+          "title": "5-Cam Blink Outdoor 4 Wireless Security Camera System w/ Sync Module Core $105 + Free S&H",
+          "link": "https://slickdeals.net/f/20274570-5-cam-blink-outdoor-4-wireless-security-camera-system-w-sync-module-core-104-99-free-shipping?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Wed, 11 Nov 2026 03:19:33 +0000"
+        },
+        {
+          "title": "AMD Ryzen 5 5600X3D + Gigabyte B550M DS3H AC R2 AM4 + G.Skill Ripjaws V 16GB DDR4 $250 + Free Pickup",
+          "link": "https://slickdeals.net/f/20259720-ryzen-5-5600x3d-cpu-gigabyte-b550m-ds3h-ac-r2-mb-16gb-g-skill-ripjaws-v-ddr4-3200-ram-microcenter-in-store-bundle-249-99?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Thu, 05 Nov 2026 12:33:01 +0000"
+        },
+        {
+          "title": "Ryzen 5 9600X CPU + Gigabyte B650E EAGLE WIFI6E MB + 32GB Team RAM + More $681 + Free S&H",
+          "link": "https://slickdeals.net/f/20211930-bundle-ryzen-5-9600x-cpu-gigabyte-b650e-eagle-wifi6e-mb-32gb-team-ram-850w-asrock-80-plus-bronze-psu-1-yr-mcafee-total-protection-681-free-shipping-680-99?utm_source=rss&utm_content=fp&utm_medium=RSS2",
+          "published": "Tue, 27 Oct 2026 17:10:08 +0000"
+        }
+      ],
+      "elapsed_s": 0.804
+    }
+  ]
+}

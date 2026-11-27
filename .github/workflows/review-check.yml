@@ -5,7 +5,7 @@ on:
       audit:
         description: Read-only audit to run after tests
         type: choice
-        options: [none, weight]
+        options: [none, weight, feeds]
         default: none
 permissions:
   contents: read
@@ -32,4 +32,13 @@ jobs:
         with:
           name: weight-runner-probe-${{ github.run_id }}
           path: /tmp/weight-runner-probe.json
+          retention-days: 7
+      - name: Read-only feeds probe
+        if: inputs.audit == 'feeds'
+        run: python tools/feed_probe.py
+      - uses: actions/upload-artifact@v4
+        if: inputs.audit == 'feeds' && always()
+        with:
+          name: feed-probe-${{ github.run_id }}
+          path: /tmp/feed-probe.json
           retention-days: 7
