@@ -1,0 +1,336 @@
+{
+  "rows": [
+    {
+      "url": "https://www.amazon.com/dp/B0DKFMSMYK",
+      "title": "AMD RYZEN 7 9800X3D 8-Core, 16-Thread Desktop Processor",
+      "route": "amazon.com",
+      "category": "cpu",
+      "source_id": "amazon-components",
+      "http": 200,
+      "ttfb_s": 0.135,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.137
+    },
+    {
+      "url": "https://www.amazon.com/dp/B07TVK8WJP",
+      "title": "Gaming Keyboard and Mouse and Mouse pad and Gaming Headset, Wired LED RGB Backlight Bundle for PC Gamers and Xbox and PS4 Users - 4 in 1 Edition Hornet RX-250",
+      "route": "amazon.com",
+      "category": "keyboard",
+      "source_id": "amazon-peripherals",
+      "http": 200,
+      "ttfb_s": 0.087,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.088
+    },
+    {
+      "url": "https://www.amazon.com/gp/product/B0FQFB8FMG/ref=sw_img_1?smid=ATVPDKIKX0DER&psc=1",
+      "title": "Apple AirPods Pro 3 Active Noise Cancellation Wireless Earbuds $149.00",
+      "route": "amazon.com",
+      "category": "headset",
+      "source_id": "techbargains",
+      "http": 200,
+      "ttfb_s": 0.106,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.107
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0CB9MSJ5N",
+      "title": "MSI MAG A850GL PCIE5, Fully Modular Compact Gaming 850W Power Supply, 80+ Gold, ATX 3.1 & PCIe 5.1 Ready, Native Dual-Color 12V-2x6 Cable, 10 Year Warranty",
+      "route": "amazon.com",
+      "category": "psu",
+      "source_id": "amazon-components",
+      "http": 200,
+      "ttfb_s": 0.095,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.097
+    },
+    {
+      "url": "https://www.amazon.com/dp/B08HYJLXJZ",
+      "title": "Gaming LED Keyboard Mouse Headset and Mousepad Bundle,Wired Rainbow",
+      "route": "amazon.com",
+      "category": "keyboard",
+      "source_id": "amazon-peripherals",
+      "http": 200,
+      "ttfb_s": 0.1,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.101
+    },
+    {
+      "url": "https://www.amazon.com/gp/product/B0DDQLGDY3/ref=ox_sc_act_title_1?smid=ATVPDKIKX0DER&th=1",
+      "title": "Beats Solo 4 Wireless On-Ear Bluetooth Headphones $99.95",
+      "route": "amazon.com",
+      "category": "headset",
+      "source_id": "techbargains",
+      "http": 200,
+      "ttfb_s": 0.101,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.102
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0G8Z1CM77",
+      "title": "MUSETEX Y6 PC Case, Pre-Installed 7 Infinity Mirror PWM ARGB Fans, ATX Mid Tower Computer Case, Gaming PC Case with Type-C, 270° Full View Tempered Glass, Black",
+      "route": "amazon.com",
+      "category": "case",
+      "source_id": "amazon-components",
+      "http": 200,
+      "ttfb_s": 0.099,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.101
+    },
+    {
+      "url": "https://www.amazon.com/dp/B08J3GK7NZ",
+      "title": "Gaming Keyboard and Mouse, Headset, Mouse Pad Combo, 10 RGB Backit Effects",
+      "route": "amazon.com",
+      "category": "keyboard",
+      "source_id": "amazon-peripherals",
+      "http": 200,
+      "ttfb_s": 0.187,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 725475,
+      "elapsed_s": 0.836
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/cpu-coolers/cw-9061045-ww/icue-link-titan-ii-360-rx-lcd-aio-liquid-cpu-cooler-cw-9061045-ww",
+      "title": "iCUE LINK TITAN II 360 RX LCD AIO Liquid CPU Cooler",
+      "route": "corsair.com",
+      "category": "cooler",
+      "source_id": "corsair-cooling",
+      "http": 200,
+      "ttfb_s": 1.77,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [
+        "Weight"
+      ],
+      "fragments": [
+        "<tr class=\"TechSpecItem_tableRow__AbqO_ block @lg:flex @lg:justify-between\"><th scope=\"row\" class=\"TechSpecItem_tableHeader__V3vB3 block text-left text-sm @lg:basis-1/2\">Weight</th><td class=\"TechSpecItem_tableData__jN4tN block @lg:basis-1/2 text-sm\">2kg</td></tr>"
+      ],
+      "bytes": 823342,
+      "elapsed_s": 1.999
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/gaming-headsets/ca-9011414-ww/hs80-v2-max-wireless-gaming-headset-ca-9011414-ww",
+      "title": "HS80 v2 MAX Wireless Gaming Headset, Steel Gray",
+      "route": "corsair.com",
+      "category": "headset",
+      "source_id": "corsair-headsets",
+      "http": 200,
+      "ttfb_s": 1.628,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 749223,
+      "elapsed_s": 1.883
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/keyboards/ch-912a31i-na/galleon-100-sd-stream-deck-integrated-mechanical-keyboard-ch-912a31i-na",
+      "title": "GALLEON 100 SD Stream Deck-Integrated Mechanical Keyboard",
+      "route": "corsair.com",
+      "category": "keyboard",
+      "source_id": "corsair-keyboards",
+      "http": 200,
+      "ttfb_s": 0.16,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [
+        "Weight"
+      ],
+      "fragments": [
+        "<tr class=\"TechSpecItem_tableRow__AbqO_ block @lg:flex @lg:justify-between\"><th scope=\"row\" class=\"TechSpecItem_tableHeader__V3vB3 block text-left text-sm @lg:basis-1/2\">Weight</th><td class=\"TechSpecItem_tableData__jN4tN block @lg:basis-1/2 text-sm\">1.392</td></tr>"
+      ],
+      "bytes": 1007735,
+      "elapsed_s": 0.342
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/memory/cmk64gx5m2a4800c40/vengeance-64gb-2x32gb-ddr5-dram-4800mhz-c40-memory-kit-black-cmk64gx5m2a4800c40",
+      "title": "VENGEANCE® 64GB (2x32GB) DDR5 DRAM Up To 4800MT/s CL40 Memory Kit — Black",
+      "route": "corsair.com",
+      "category": "ram",
+      "source_id": "corsair-memory",
+      "http": 200,
+      "ttfb_s": 1.137,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [
+        "Weight"
+      ],
+      "fragments": [
+        "<tr class=\"TechSpecItem_tableRow__AbqO_ block @lg:flex @lg:justify-between\"><th scope=\"row\" class=\"TechSpecItem_tableHeader__V3vB3 block text-left text-sm @lg:basis-1/2\">Weight</th><td class=\"TechSpecItem_tableData__jN4tN block @lg:basis-1/2 text-sm\">0kg</td></tr>"
+      ],
+      "bytes": 955410,
+      "elapsed_s": 1.405
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/gaming-mouse/ch-931g400-ww/sabre-v3-pro-purevector-ultralight-wireless-gaming-mouse-ch-931g400-ww",
+      "title": "SABRE v3 PRO PureVector Ultralight Wireless Gaming Mouse",
+      "route": "corsair.com",
+      "category": "mouse",
+      "source_id": "corsair-mice",
+      "http": 200,
+      "ttfb_s": 1.322,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [
+        "Weight"
+      ],
+      "fragments": [
+        "<tr class=\"TechSpecItem_tableRow__AbqO_ block @lg:flex @lg:justify-between\"><th scope=\"row\" class=\"TechSpecItem_tableHeader__V3vB3 block text-left text-sm @lg:basis-1/2\">Weight</th><td class=\"TechSpecItem_tableData__jN4tN block @lg:basis-1/2 text-sm\">0.037</td></tr>"
+      ],
+      "bytes": 1005619,
+      "elapsed_s": 1.59
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/psu/cp-9020315-na/hx1000i-shift-crystal-fully-modular-high-performance-atx-power-supply-cp-9020315-na",
+      "title": "HX1000i SHIFT CRYSTAL Fully Modular High-Performance ATX Power Supply",
+      "route": "corsair.com",
+      "category": "psu",
+      "source_id": "corsair-psu",
+      "http": 200,
+      "ttfb_s": 1.93,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [
+        "Weight"
+      ],
+      "fragments": [
+        "<tr class=\"TechSpecItem_tableRow__AbqO_ block @lg:flex @lg:justify-between\"><th scope=\"row\" class=\"TechSpecItem_tableHeader__V3vB3 block text-left text-sm @lg:basis-1/2\">Weight</th><td class=\"TechSpecItem_tableData__jN4tN block @lg:basis-1/2 text-sm\">4kg</td></tr>"
+      ],
+      "bytes": 738652,
+      "elapsed_s": 2.133
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/cpu-coolers/cw-9061037-ww/icue-link-titan-ii-360-rx-rgb-aio-liquid-cpu-cooler-cw-9061037-ww",
+      "title": "iCUE LINK TITAN II 360 RX RGB AIO Liquid CPU Cooler",
+      "route": "corsair.com",
+      "category": "cooler",
+      "source_id": "corsair-cooling",
+      "http": 200,
+      "ttfb_s": 0.975,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [
+        "Weight"
+      ],
+      "fragments": [
+        "<tr class=\"TechSpecItem_tableRow__AbqO_ block @lg:flex @lg:justify-between\"><th scope=\"row\" class=\"TechSpecItem_tableHeader__V3vB3 block text-left text-sm @lg:basis-1/2\">Weight</th><td class=\"TechSpecItem_tableData__jN4tN block @lg:basis-1/2 text-sm\">2kg</td></tr>"
+      ],
+      "bytes": 651302,
+      "elapsed_s": 1.163
+    },
+    {
+      "url": "https://www.corsair.com/us/en/p/gaming-headsets/ca-9011370-na/virtuoso-pro-open-back-streaming-gaming-headset-carbon-ca-9011370-na",
+      "title": "VIRTUOSO PRO Open Back Streaming/Gaming Headset - Carbon",
+      "route": "corsair.com",
+      "category": "headset",
+      "source_id": "corsair-headsets",
+      "http": 200,
+      "ttfb_s": 1.7,
+      "weight_missing_reason": "no_explicit_weight_with_units",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 779014,
+      "elapsed_s": 1.913
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0GQF1NG5M",
+      "title": "Best Black Friday mini PC deals: Save big on tiny computers",
+      "route": "aggregator-linked",
+      "category": "minipc",
+      "source_id": "pcworld-deals",
+      "http": 200,
+      "ttfb_s": 0.14,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.141
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0CH4NYL6J",
+      "title": "Black Friday is the perfect time to pick up a new 3D Printer",
+      "route": "aggregator-linked",
+      "category": "printer",
+      "source_id": "tomshardware",
+      "http": 200,
+      "ttfb_s": 0.095,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.096
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0G5Z5N274",
+      "title": "Best Black Friday monitor deals: The perfect PC upgrade for 2026",
+      "route": "aggregator-linked",
+      "category": "monitor",
+      "source_id": "pcworld-deals",
+      "http": 200,
+      "ttfb_s": 0.092,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.094
+    },
+    {
+      "url": "https://www.amazon.com/dp/B09XYYMJ9D",
+      "title": "Kasa KS200M Smart WiFi Motion Sensor Switch  $17 at Amazon",
+      "route": "aggregator-linked",
+      "category": "networking",
+      "source_id": "bensbargains",
+      "http": 200,
+      "ttfb_s": 0.147,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.148
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0FS98L5XP",
+      "title": "Black Friday Memory, SSD & Flash Drives Sale  at Amazon",
+      "route": "aggregator-linked",
+      "category": "ext_storage",
+      "source_id": "bensbargains",
+      "http": 200,
+      "ttfb_s": 0.097,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.099
+    },
+    {
+      "url": "https://www.amazon.com/dp/B0CNTTVVN6",
+      "title": "Best Black Friday Thunderbolt dock deals: Your laptop deserves more ports",
+      "route": "aggregator-linked",
+      "category": "laptop",
+      "source_id": "pcworld-deals",
+      "http": 200,
+      "ttfb_s": 0.093,
+      "weight_missing_reason": "challenge_page",
+      "weight_labels": [],
+      "fragments": [],
+      "bytes": 3781,
+      "elapsed_s": 0.094
+    }
+  ]
+}
