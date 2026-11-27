@@ -66,3 +66,6 @@ API и редактирование отправленных постов — д
 
 
 Шаг 2 / O5=ON: диапазоны из config/estimate_v1.json, метка «≈ … кг (оценка по категории)», default ON; WEIGHT_ESTIMATES=0 выключает. Только измеренные package-веса уточняют диапазон (>=3 уникальных наблюдений, границы расширяются с запасом, не сужаются). Package/net provenance не содержит оценок; для комплекта полное покрытие всех компонентов обязательно, метка «≈ сумма». Unknown category остаётся неизвестной. PARSER_VERSION=6. Тесты test_estimate_ranges: диапазоны/флаг/комплекты/калибровка/validate+restart.
+
+
+Шаг 3: optional weight_edits.json.gz <=400КБ/2000 записей, TTL24ч; отдельный validate/load/merge/artifact, без изменения publication_history/posted/delivery. Копируется message_id из реального receipt, сохраняется точный send payload/hash. Одна попытка редактирования только строки веса, preflight публичного превью запрещает перезапись ручной цены/ссылок. text→editMessageText, photo→editMessageCaption. Неопределённый ответ не повторяется. config/late_weight_edit.json=canary (одна попытка); штатный ON запрещён, пока public_preview_verified=false. OFF: LATE_WEIGHT_EDITS=off. После наблюдаемой реальной правки разрешён переход ON; до этого proof4 pending. Регрессии: test_weight_edits.

@@ -12,6 +12,7 @@ import checkpoints
 import state_merge
 import offer_audit
 import weight_knowledge
+import weight_edits
 
 # Accept the existing ~28 MB legacy generation during migration; reject unbounded inputs.
 RECOVERY_MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -45,6 +46,12 @@ class RunnerGit:
         for path in sorted(data.rglob("*")) if data.exists() else []:
             if not path.is_file() or path.is_symlink() or path.suffix == ".tmp":
                 continue
+            if path.name == weight_edits.FILE:
+                try:
+                    if path.stat().st_size>weight_edits.MAX_BYTES:raise ValueError('edit size')
+                    weight_edits.decode(path.read_bytes())
+                except (OSError,ValueError,EOFError):
+                    print('[WEIGHT EDIT] optional registry skipped');continue
             if path.name == weight_knowledge.FILE:
                 try:
                     if path.stat().st_size > weight_knowledge.MAX_BYTES: raise ValueError('weight knowledge size')
@@ -90,6 +97,15 @@ class RunnerGit:
         return files
 
     def merge_remote_state(self, files, parent):
+        name='data/'+weight_edits.FILE
+        size=self.git('cat-file','-s',parent+':'+name,check=False)
+        if size.returncode==0 and int(size.stdout.strip())<=weight_edits.MAX_BYTES:
+            remote=self.git('show',parent+':'+name,check=False,binary=True)
+            if remote.returncode==0:
+                try:
+                    weight_edits.decode(remote.stdout);files=dict(files)
+                    files[name]=weight_edits.merge_bytes(remote.stdout,files[name]) if name in files else remote.stdout
+                except (OSError,ValueError,EOFError):print('[WEIGHT EDIT] optional remote registry ignored')
         name='data/'+weight_knowledge.FILE
         size=self.git('cat-file','-s',parent+':'+name,check=False)
         if size.returncode==0 and int(size.stdout.strip())<=weight_knowledge.MAX_BYTES:
@@ -296,6 +312,15 @@ class RunnerGit:
                     value=path.read_bytes();weight_knowledge.decode(value)
                     recovered[name]=weight_knowledge.merge_bytes(local[name],value) if name in local else value
                 except (OSError,ValueError,EOFError):print('[WEIGHT] optional artifact knowledge ignored.')
+            name='data/'+weight_edits.FILE
+            path=Path(tmp)/weight_edits.FILE
+            if not path.exists():path=Path(tmp)/'data'/weight_edits.FILE
+            if path.exists():
+                try:
+                    if path.is_symlink() or path.stat().st_size>weight_edits.MAX_BYTES:raise ValueError('edit size')
+                    value=path.read_bytes();weight_edits.decode(value)
+                    recovered[name]=weight_edits.merge_bytes(local[name],value) if name in local else value
+                except (OSError,ValueError,EOFError):print('[WEIGHT EDIT] optional artifact ignored')
             self.restore(recovered)
         print("Recovered newer state from " + latest["name"] + ".")
 

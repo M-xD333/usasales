@@ -1,0 +1,6 @@
+{
+  "mode": "canary",
+  "public_preview_verified": false,
+  "window_hours": 24,
+  "note": "One weight-only attempt; ordinary ON is forbidden until public preview verification. LATE_WEIGHT_EDITS=off disables."
+}
