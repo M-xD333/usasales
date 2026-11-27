@@ -1,0 +1,322 @@
+{
+  "rows": [
+    {
+      "upc": "843591004503",
+      "title": "CORSAIR XMS2 2GB ( 2 X 1GB ) PC2-6400 800MHz 240-pin DDR2 CL5 Dual Channel Desktop Memory Kit - TWIN2X4096-6400C5C",
+      "found": true,
+      "provider_weight": "0.3 Pounds",
+      "unit_mass_kg": 0.136077711,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "843591015752",
+      "title": "Corsair AX1200i ATX Power Supply 1200 Watt 80 PLUS Platinum Certified Fully-Modular PSU",
+      "found": true,
+      "provider_weight": "8.8 Pounds",
+      "unit_mass_kg": 3.9916128560000006,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "843591016285",
+      "title": "Corsair XMS3 8GB DDR3 SDRAM Memory Module",
+      "found": true,
+      "provider_weight": "0.3 Pounds",
+      "unit_mass_kg": 0.136077711,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "843591016971",
+      "title": "16GB KIT 2X8GB 1600MHZ DDR3 VENGEANCE PERFORMANCE SODIMM",
+      "found": true,
+      "provider_weight": "1.00 lbs",
+      "unit_mass_kg": 0.45359237,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "843591030755",
+      "title": "Corsair CX750M 750W ATX Computer Power Supply",
+      "found": true,
+      "provider_weight": "6.4 Pounds",
+      "unit_mass_kg": 2.9029911680000002,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "824142159859",
+      "title": "MSI GP73 Gaming Laptop 17.3\", Intel Core i7-8750H, NVIDIA GeForce GTX 1050 Ti 4GB, 128GB SSD + 1TB HDD Storage, 16GB RAM, LEOPARD-001",
+      "found": true,
+      "provider_weight": "16.70 ounces",
+      "unit_mass_kg": 0.4734370361875,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "824142159675",
+      "title": "MSI GE73 Gaming Laptop 17.3\", Intel Core i7-8750H, NVIDIA GeForce GTX 1060 6GB, 256GB SSD + 1TB HDD Storage, 16GB RAM, Raider RGB-013",
+      "found": true,
+      "provider_weight": "16.70 ounces",
+      "unit_mass_kg": 0.4734370361875,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "824142159712",
+      "title": "MSI GP73 Gaming Laptop 17.3\", Intel Core i7-8750H, NVIDIA GeForce GTX 1060 6GB, 256GB SSD + 1TB HDD Storage, 16GB RAM, LEOPARD-014",
+      "found": true,
+      "provider_weight": "9.24 lb",
+      "unit_mass_kg": 4.191193498800001,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "824142160176",
+      "title": "MSI CUBIN-8GL-010US Desktop 4GB 32GB 500GB Intel Pentium N5000 Windows 10 Pro",
+      "found": true,
+      "provider_weight": "0.0400lb",
+      "unit_mass_kg": 0.018143694800000002,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "824142161678",
+      "title": "MSI Vortex W25 Vortex W25 8SK-059 Workstation i7-8700 32GB 1TB 256GB P3200 6GB",
+      "found": true,
+      "provider_weight": "0.0400lb",
+      "unit_mass_kg": 0.018143694800000002,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "811571016976",
+      "title": "Google Pixel C Keyboard - Qwerty Uk - Bluetooth (black)",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "842776101129",
+      "title": "Google Pixel 2 64GB Unlocked GSM/CDMA 4G LTE Octa-Core Phone w/ 12.2MP Camera - Just Black",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "842776101136",
+      "title": "Google Pixel 2 64gb Clearly White (unlocked) Smartphone Brand Factory Sealed",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "842776101426",
+      "title": "New Google Pixel 2 XL 64GB G011C GSM + CDMA Factory Unlocked 4G LTE 6  P-OLED Display 4GB RAM 12.2MP Camera Phone - Just Black",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "842776101433",
+      "title": "Google Pixel 2 XL",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "097855060570",
+      "title": "Logitech Z323 Speaker System",
+      "found": true,
+      "provider_weight": "8.9 Pounds",
+      "unit_mass_kg": 4.036972093,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    },
+    {
+      "upc": "097855089144",
+      "title": "Logitech Anywhere Mouse MX Wireless - for PC & Mac with Receiver & Case",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "097855121097",
+      "title": "Logitech M317 Wireless Memphis Blue Mouse - Black (910-004749)",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "097855121073",
+      "title": "Logitech Party Collection M317c Wireless Mouse",
+      "found": true,
+      "provider_weight": "",
+      "unit_mass_kg": null,
+      "kind": "unknown",
+      "reason": "missing weight or unit"
+    },
+    {
+      "upc": "097855195418",
+      "title": "Logitech Plug & Play Optical Wireless Mouse  Black  Walmart Exclusive",
+      "found": true,
+      "provider_weight": "0.29lb",
+      "unit_mass_kg": 0.1315417873,
+      "kind": "unknown",
+      "reason": "provider weight does not identify package/net"
+    }
+  ],
+  "selected": 20,
+  "trace": [
+    {
+      "method": "search",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "99"
+      }
+    },
+    {
+      "method": "search",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "98"
+      }
+    },
+    {
+      "method": "search",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "97"
+      }
+    },
+    {
+      "method": "search",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "96"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "95"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "93"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "91"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "89"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "87"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "85"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "83"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "81"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "79"
+      }
+    },
+    {
+      "method": "lookup",
+      "http": 200,
+      "limits": {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Reset": "1795849925",
+        "X-RateLimit-Remaining": "77"
+      }
+    }
+  ],
+  "stopped": null,
+  "summary": {
+    "attempted_products": 20,
+    "returned": 20,
+    "weight_with_units": 12,
+    "confirmed_pkg": 0,
+    "confirmed_net": 0
+  },
+  "limits_source": "https://www.upcitemdb.com/wp/docs/main/development/plan/"
+}
