@@ -704,3 +704,6 @@ Smoke не публикует и не сохраняет состояние, н�
 
 
 Шаг6 остановлен по результату измерения: Slickdeals RSS0/75 entries с реальным score/thumb/vote. Ничего не маппировать и не менять пороги; media_thumbnail — не голоса. Подробности docs/slickdeals-score-2026-11-27.md, regression test_feed_probe.test_thumbnails_are_not_real_community_votes.
+
+
+Шаг7 Woot: официальный бесплатный Developer API, header x-api-key, feed/Computers и feed/Electronics. woot_api.fetch без WOOT_API_KEY не выполняет запрос. Адаптер не зарегистрирован в publishing loop; включение после ключа требует scheduler>=900с/2feeds (<=192/день при квоте1000). Диапазоны вариантов/App-only сохраняются как неоднозначные кандидаты, не минимальная цена. HTTP429 не повторять, ключ не логировать. Официальный пример fixtures/woot, тесты test_woot_api; подробности docs/woot-api-design.md.
