@@ -1,6 +1,12 @@
 name: Offline review validation
 on:
   workflow_dispatch:
+    inputs:
+      audit:
+        description: Read-only audit to run after tests
+        type: choice
+        options: [none, weight]
+        default: none
 permissions:
   contents: read
 jobs:
@@ -18,3 +24,12 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m compileall -q -x '/\.git/' .
       - run: python -m pytest -q
+      - name: Read-only weight probe
+        if: inputs.audit == 'weight'
+        run: python tools/weight_runner_probe.py
+      - uses: actions/upload-artifact@v4
+        if: inputs.audit == 'weight' && always()
+        with:
+          name: weight-runner-probe-${{ github.run_id }}
+          path: /tmp/weight-runner-probe.json
+          retention-days: 7

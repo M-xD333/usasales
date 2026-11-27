@@ -22,6 +22,7 @@ import product_images
 import product_weight
 import weight_knowledge
 import weight_lookup
+import runtime_info
 import market_prices
 import market_search
 import checkpoints
@@ -999,6 +1000,8 @@ def main(argv=None):
     if not dry and not (os.environ.get("TG_BOT_TOKEN") and os.environ.get("TG_CHAT_ID")):
         print("[ERROR] не заданы TG_BOT_TOKEN / TG_CHAT_ID (GitHub Secrets)")
         return 2
+    runtime = runtime_info.receipt(PARSER_VERSION,RULES_VERSION,now)
+    print(runtime['log_line'])
     print(f"Режим: {'DRY RUN (без отправки и сохранения)' if dry else 'боевой'}")
 
     checkpoint_store = checkpoints.Store(DATA)
@@ -1038,6 +1041,7 @@ def main(argv=None):
     for d in deals:
         if knowledge: knowledge.remember(d)
     ledger = None if dry else offer_audit.Ledger(DATA / offer_audit.FILE, now, RULES_VERSION)
+    if ledger: ledger.doc['runtime']=runtime
     audit = (lambda *args: None) if ledger is None else (lambda d, decision, reason='': ledger.record(d, decision, redact(reason)))
     for d in deals:
         audit(d, 'not_evaluated', 'seen in feed; assessment not reached')

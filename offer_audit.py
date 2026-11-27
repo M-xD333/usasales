@@ -47,6 +47,9 @@ def decode(data):
             raise ValueError('invalid audit timestamp/version')
         if any(row.get(k) is not None and not number(row[k]) for k in ('price','was','seen_ts','published_ts')):
             raise ValueError('invalid audit price/time')
+    runtime=doc.get('runtime')
+    if runtime is not None and (not isinstance(runtime,dict) or not number(runtime.get('at')) or not isinstance(runtime.get('log_line'),str) or len(runtime['log_line'])>250):
+        raise ValueError('invalid runtime receipt')
     if any(not number(doc.get(k)) for k in ('started_at','truncated_before','dropped_capacity')):
         raise ValueError('invalid audit coverage metadata')
     return doc
@@ -90,6 +93,8 @@ def merge_bytes(remote, local, now=None):
     doc={'version':1,'started_at':min(a['started_at'],b['started_at']),
          'truncated_before':max(a.get('truncated_before',0),b.get('truncated_before',0)),
          'dropped_capacity':max(a.get('dropped_capacity',0),b.get('dropped_capacity',0)), 'rows':list(rows.values())}
+    runtime=max((d['runtime'] for d in (a,b) if isinstance(d.get('runtime'),dict)),key=lambda r:r['at'],default=None)
+    if runtime:doc['runtime']=runtime
     return compact(doc,time.time() if now is None else now)[1]
 
 
