@@ -94,3 +94,6 @@ API и редактирование отправленных постов — д
 
 
 Шаг10: Discord OFF-дизайн, собственный bot token/Follow, никакого runtime/пользовательских токенов или перепубликации. Реальное событие Telegram ещё необходимо для proof4; зелёные тесты/merge не подменяют его. Текущий отчёт docs/owner-steps-2026-11-27.md.
+
+
+Финальная регрессия O4: ProductGroup/hasVariant/isVariantOf в прямом каталоге не передают parent-weight в пакет или net. Правило уже действовало для целого HTML и теперь одинаково для source product_meta и кеша. PARSER_VERSION=7, RULES_VERSION=8; tests/test_variant_weight_safety.py. Не меняет price/publication floors.
