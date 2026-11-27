@@ -1,9 +1,11 @@
-"""Explicit product/net weight only; units are mandatory, shipping weight is excluded."""
+"""O4: explicit package and net weights, never interchangeable; units mandatory."""
 import html
 from html.parser import HTMLParser
 import json
 import math
 import re
+import time
+import os
 from urllib.parse import urljoin, urlsplit
 
 FACTORS = {'kg': 1, 'kgs': 1, 'kilogram': 1, 'kilograms': 1, 'kgm': 1, 'кг': 1,
@@ -33,19 +35,8 @@ def kilograms(value, unit=None):
 
 
 def from_product(product):
-    weight = kilograms(product.get('weight'))
-    if weight is not None:
-        return weight
-    properties = product.get('additionalProperty', [])
-    if isinstance(properties, dict):
-        properties = [properties]
-    if not isinstance(properties, list):
-        return None
-    values = [kilograms(p.get('value'), p.get('unitCode') or p.get('unitText'))
-              for p in properties if isinstance(p, dict) and
-              str(p.get('name', '')).strip().lower() in ('weight', 'item weight', 'net weight', 'product weight')]
-    known = {v for v in values if v is not None}
-    return known.pop() if len(known) == 1 else None
+    """Compatibility: this legacy scalar is NET only."""
+    return from_product_fields(product).get('weight_net_kg')
 
 
 class Specs(HTMLParser):
@@ -94,28 +85,176 @@ def products(obj):
 
 
 def from_markup(markup, base):
-    parser = Specs()
-    parser.feed(markup or '')
-    items = [p for script in parser.scripts for p in products(script)]
-    def identity(url):
-        parts = urlsplit(urljoin(base, url))
-        return parts.hostname, parts.path.rstrip('/'), parts.query
-    exact = [p for p in items if isinstance(p.get('url'), str) and identity(p['url']) == identity(base)]
-    selected = exact or ([items[0]] if len(items) == 1 and not items[0].get('url') else [])
-    known = {v for p in selected if (v := from_product(p)) is not None}
-    if known:
-        return known.pop() if len(known) == 1 else None
-    # Multiple product/variant records must never borrow a recommendation's specs.
-    if len(items) > 1 and not exact:
-        return None
-    values = set()
-    for label, value in zip(parser.cells, parser.cells[1:]):
-        match = re.fullmatch(r'(?:item |net |product )?weight\s*:?(?:\s*\(([^)]+)\))?', label, re.I)
-        if match and (kg := kilograms(value, match.group(1))) is not None:
-            values.add(kg)
-    return values.pop() if len(values) == 1 else None
+    """Compatibility scalar; new callers must use extract() for both kinds."""
+    return extract(markup, base).get('weight_net_kg')
 
 
 def display(value):
     kg = kilograms(value, 'kg')
     return (f'{kg:.4f}'.rstrip('0').rstrip('.') + ' кг') if kg is not None else 'не указан'
+
+
+PKG_LABELS = {'shipping weight', 'package weight', 'weight (with packaging)',
+              'weight with packaging', 'gross weight', 'packaged weight'}
+NET_LABELS = {'item weight', 'product weight', 'net weight', 'weight (without packaging)'}
+WEIGHT_FIELDS = ('weight_pkg_kg','weight_net_kg','weight_pkg_provenance','weight_net_provenance',
+                 'weight_sum_kg','weight_sum_provenance','weight_estimate_kg','weight_missing_reason','weight_components')
+
+
+def field_kind(label):
+    label=' '.join(str(label).replace('\xa0',' ').lower().strip(' :').split())
+    if label in PKG_LABELS:return 'pkg',None
+    if label in NET_LABELS:return 'net',None
+    match=re.fullmatch(r'(.+?)\s*\((kg|g|lb|lbs|oz|pounds|grams)\)',label)
+    if match:
+        kind,_=field_kind(match[1]);return kind,match[2]
+    return None,None
+
+
+def _fields(observations, source, at=None):
+    result={};at=time.time() if at is None else at
+    for kind in ('pkg','net'):
+        candidates=[(kg,field) for k,kg,field in observations if k==kind and kg is not None]
+        unique={round(kg,9) for kg,_ in candidates}
+        if len(unique)==1:
+            kg,field=candidates[0]
+            result['weight_'+kind+'_kg']=kg
+            result['weight_'+kind+'_provenance']={'source':str(source)[:512],'field':str(field)[:128],'ts':at}
+        elif len(unique)>1:result['weight_missing_reason']='conflicting_'+kind+'_weights'
+    if not result:result['weight_missing_reason']='no_explicit_weight_with_units'
+    return result
+
+
+def from_product_fields(product, source='', at=None):
+    observations=[]
+    if not isinstance(product,dict):return {}
+    if product.get('weight') is not None:observations.append(('net',kilograms(product['weight']),'Product.weight'))
+    properties=product.get('additionalProperty',[])
+    if isinstance(properties,dict):properties=[properties]
+    for prop in properties if isinstance(properties,list) else []:
+        if not isinstance(prop,dict):continue
+        kind,unit=field_kind(prop.get('name',''))
+        if kind:observations.append((kind,kilograms(prop.get('value'),prop.get('unitCode') or prop.get('unitText') or unit),prop.get('name')))
+    return _fields(observations,source or product.get('url',''),at)
+
+
+def extract(markup, base, at=None):
+    if re.search(r'(?:validateCaptcha|captcha/|api-services-support@amazon|cf-chl-|Just a moment)',markup or '',re.I):
+        return {'weight_missing_reason':'challenge_page'}
+    if re.search(r'id=["\']variation_(?:color|size|style|capacity)',markup or '',re.I):
+        return {'weight_missing_reason':'ambiguous_variants'}
+    parser=Specs();parser.feed(markup or '')
+    items=[p for script in parser.scripts for p in products(script)]
+    if any('ProductGroup' in json.dumps(script) or '"hasVariant"' in json.dumps(script) for script in parser.scripts):
+        return {'weight_missing_reason':'ambiguous_variants'}
+    def identity(url):
+        parts=urlsplit(urljoin(base,url));return parts.hostname,parts.path.rstrip('/'),parts.query
+    exact=[p for p in items if isinstance(p.get('url'),str) and identity(p['url'])==identity(base)]
+    # Variant groups have no safe page-global specification scope, even with one exact child URL.
+    if len(items)>1 or any(p.get('hasVariant') or p.get('isVariantOf') for p in items):
+        return {'weight_missing_reason':'ambiguous_variants'}
+    if items and not (exact or len(items)==1 and not items[0].get('url')):
+        return {'weight_missing_reason':'product_identity_mismatch'}
+    observations=[]
+    for product in exact or items:
+        fields=from_product_fields(product,base,at)
+        for kind in ('pkg','net'):
+            if fields.get('weight_'+kind+'_kg'):
+                observations.append((kind,fields['weight_'+kind+'_kg'],fields['weight_'+kind+'_provenance']['field']))
+        if fields.get('weight_missing_reason','').startswith('conflicting_'):
+            return fields
+    for label,value in zip(parser.cells,parser.cells[1:]):
+        kind,unit=field_kind(label)
+        if label.lower().strip(' :')=='package dimensions':
+            # Only the semicolon-delimited mass, never any dimension or unitless number.
+            tail=value.rsplit(';',1)
+            if len(tail)==2:observations.append(('pkg',kilograms(tail[1].strip()),'Package Dimensions'))
+        elif kind:observations.append((kind,kilograms(value,unit),label))
+    # Amazon detail-bullets use li/span instead of table cells.
+    plain=html.unescape(re.sub(r'<[^>]+>',' ',markup or ''))
+    plain=' '.join(plain.replace('\u200e','').replace('\u200f','').split())
+    mass=r'(\d+(?:\.\d+)?\s*(?:pounds?|lbs?|ounces?|oz|kg|g))\b(?!\s*(?:\d|[-–]\s*\d))'
+    for match in re.finditer(r'\b(Shipping Weight|Package Weight|Item Weight|Product Weight|Net Weight)\s*:\s*'+mass,plain,re.I):
+        label,value=match.groups();observations.append((field_kind(label)[0],kilograms(value),label))
+    for match in re.finditer(r'\bPackage Dimensions\s*:\s*[^;:]{1,150};\s*'+mass,plain,re.I):
+        observations.append(('pkg',kilograms(match[1]),'Package Dimensions'))
+    return _fields(observations,base,at)
+
+
+def apply(target, values):
+    for field in WEIGHT_FIELDS:
+        if field in values:target[field]=values[field]
+    # Compatibility export is always NET, never the package value.
+    target['weight_kg']=target.get('weight_net_kg')
+    return target
+
+
+def bundle(deal):
+    return deal.get('cat')=='combo' or bool(re.search(r'\b(?:combo|bundle)\b',deal.get('title',''),re.I))
+
+
+def prepare(deal, estimates=None):
+    # A measured bundle package is usable only when explicitly attached to that bundle.
+    if bundle(deal) and not deal.get('weight_pkg_kg'):
+        parts=deal.get('weight_components',[])
+        if not parts:
+            for k in WEIGHT_FIELDS:deal.pop(k,None)
+            deal['weight_missing_reason']='bundle_components_incomplete'
+        else:
+            totals={kind:[] for kind in ('pkg','net')}
+            for part in parts:
+                for kind in totals:
+                    kg=kilograms(part.get('weight_'+kind+'_kg'),'kg')
+                    qty=part.get('quantity',1)
+                    totals[kind].append(kg*qty if kg and type(qty)==int and 0<qty<=100 else None)
+            known=next((values for values in totals.values() if all(v is not None for v in values)),None)
+            for k in ('weight_net_kg','weight_net_provenance','weight_sum_kg','weight_sum_provenance'):deal.pop(k,None)
+            if known:
+                deal['weight_sum_kg']=sum(known)
+                deal['weight_sum_provenance']={'source':'components','field':'sum; not measured parcel','ts':time.time()}
+            else:deal['weight_missing_reason']='bundle_components_incomplete'
+    enabled=os.getenv('WEIGHT_ESTIMATES','0')=='1' if estimates is None else estimates
+    if enabled and not bundle(deal) and not any(deal.get('weight_'+k+'_kg') for k in ('pkg','net','sum')):
+        estimate={'mouse':.3,'keyboard':1.5,'headset':.7,'cpu':.2,'ram':.2,'ssd':.2}.get(deal.get('cat'))
+        if estimate:deal['weight_estimate_kg']=estimate
+    elif not enabled:deal.pop('weight_estimate_kg',None)
+    return deal
+
+
+def status(deal):
+    for kind in ('pkg','net'):
+        if kilograms(deal.get('weight_'+kind+'_kg'),'kg'):
+            return {'found':True,'source':(deal.get('weight_'+kind+'_provenance') or {}).get('source','unknown'),
+                    'kind':kind,'missing_reason':''}
+    if deal.get('weight_sum_kg'):
+        return {'found':True,'source':'components','kind':'net','missing_reason':'component_sum_not_measured_package'}
+    return {'found':False,'source':'','kind':'unknown','missing_reason':deal.get('weight_missing_reason','not_looked_up')}
+
+
+def display_deal(deal):
+    prepare(deal)
+    for kind,label in (('pkg','с упаковкой'),('net','без упаковки')):
+        if kilograms(deal.get('weight_'+kind+'_kg'),'kg'):return display(deal['weight_'+kind+'_kg'])+' ('+label+')'
+    if kilograms(deal.get('weight_sum_kg'),'kg'):return '≈ '+display(deal['weight_sum_kg'])+' (сумма комплектующих)'
+    if kilograms(deal.get('weight_estimate_kg'),'kg'):return '≈ '+display(deal['weight_estimate_kg'])+' (оценка)'
+    return 'не указан'
+
+
+def validate(deal):
+    for field in ('weight_pkg_kg','weight_net_kg','weight_sum_kg','weight_estimate_kg'):
+        if field in deal and deal[field] is not None and (isinstance(deal[field],bool) or not isinstance(deal[field],(int,float)) or kilograms(deal[field],'kg') is None):raise ValueError('invalid '+field)
+        provenance=deal.get(field.replace('_kg','_provenance'))
+        if deal.get(field) and field!='weight_estimate_kg':
+            if not isinstance(provenance,dict) or not all(isinstance(provenance.get(k),str) and provenance[k] for k in ('source','field')):
+                raise ValueError('missing weight provenance')
+            ts=provenance.get('ts')
+            if isinstance(ts,bool) or not isinstance(ts,(int,float)) or not math.isfinite(ts):raise ValueError('invalid weight timestamp')
+    components=deal.get('weight_components')
+    if components is not None:
+        if not isinstance(components,list) or len(components)>30:raise ValueError('invalid weight components')
+        for part in components:
+            if not isinstance(part,dict) or 'weight_components' in part:raise ValueError('invalid weight component')
+            qty=part.get('quantity',1)
+            if type(qty)!=int or not 0<qty<=100:raise ValueError('invalid component quantity')
+            validate(part)
+    return deal

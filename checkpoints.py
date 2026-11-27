@@ -19,11 +19,18 @@ class CheckpointError(ValueError):
 
 
 def validate_state(state):
+    import product_weight as W
     if not isinstance(state, dict):
         raise CheckpointError('state must be a JSON object; refusing to reset delivery history')
     for key in ('posted', 'processed', 'pending', 'sources', 'assessment_cache', 'price_events', 'publication_history'):
         if key in state and not isinstance(state[key], dict):
             raise CheckpointError('invalid state field: ' + key)
+    for deal in state.get('pending', {}).values():
+        if isinstance(deal,dict):
+            try:
+                W.validate(deal)
+                if isinstance(deal.get('product_meta'),dict): W.validate(deal['product_meta'])
+            except ValueError as ex: raise CheckpointError(str(ex)) from ex
     for record in state.get('publication_history', {}).values():
         if (not isinstance(record, dict) or type(record.get('lowest_cents')) is not int or record['lowest_cents'] <= 0
                 or not isinstance(record.get('at'), (int, float)) or not math.isfinite(record['at'])

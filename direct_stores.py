@@ -141,6 +141,7 @@ def offer_meta(product, offer, base):
                 pass
     return {"brand": brand if isinstance(brand, str) else "", "mpn": mpn,
             "weight_kg": product_weight.from_product(product),
+            **product_weight.from_product_fields(product,base),
             "gtins": [str(product[k]) for k in ("gtin", "gtin8", "gtin12", "gtin13", "gtin14") if product.get(k)],
             "currency": offer.get("priceCurrency"),
             "market": "US" if not re.search(r"/(?:uk|gb|de|fr|ca|au|jp|en-gb|en-ca)(?:/|$)", urlsplit(base).path, re.I) else None,

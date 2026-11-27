@@ -39,3 +39,22 @@
 ## Уточнение 2026-11-09: ежедневные повторы
 
 Прежнее требование разрешать повтор одинаковой акции после TTL заменено: время само по себе не делает предложение новым. `tests/test_publication_history.py` проверяет дни 1/2/3/7/30, более низкую цену, запрет более высокой и возврата к прежней, смену ленты/ID/заголовка/меток URL, два одинаковых товара в одном проходе, старые записи `posted`, разные варианты/состояние, сбой доставки, перезапуск и конкурентное Git-слияние постоянной истории.
+
+
+## O4: вес упаковки, 2026-11-27
+
+Shipping Weight теперь разрешён и приоритетен; прежняя политика исключения упаковки отменена владельцем. Package/net не смешиваются, каждое значение имеет единицу и происхождение. Ожидание карточки не задерживает отправку; неизвестный вес сохраняет публикацию.
+
+| Сценарий | Требование | Регрессия |
+|---|---|---|
+| package vs net | Package приоритетен; net явно «без упаковки» | test_package_weight.test_explicit_field_names; test_dry_run_five_cases_and_photo_fallback |
+| Amazon Package Dimensions | Только масса после `;`, не размеры/диапазоны | test_amazon_package_dimensions_not_dimensions_and_bullets_both_kinds |
+| ambiguity/challenge | Не выдумывать вес, не обходить защиту | test_ambiguous_unitless_conflicting_and_variants_stay_unknown; test_real_html_fragments_and_compound_mass_are_not_mislabelled |
+| bundle | Только полный набор, подпись «сумма комплектующих» | test_dry_run_five_cases_and_photo_fallback |
+| O5 | Оценки OFF, явная маркировка при включении | test_estimates_off_by_default_and_explicitly_labelled |
+| deadline | Hung lookup не задерживает mock-доставку | test_lookup_hard_deadline_and_publication_never_waits |
+| knowledge | <=500 КБ, restart, package/net раздельно, строгие варианты | test_knowledge_size_cap_and_merge; test_knowledge_restart_cross_store_separate_kinds_and_variant_safety |
+| state | validate/load/merge, статус аудита, старые строки unmeasured | test_state_validate_restart_merge_and_weight_audit |
+| Git | Два писателя и повреждённый необязательный кеш не трогают posted | test_workflow_git.RunnerSyncTests.test_weight_knowledge_concurrent_merge_and_corrupt_optional_snapshot |
+
+API и редактирование отправленных постов — дизайн, без запросов/изменений Telegram. Обычные business-пороги, posted, delivery и publication_history floors не меняются. PARSER_VERSION=5, RULES_VERSION=7.

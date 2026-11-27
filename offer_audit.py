@@ -10,6 +10,7 @@ from pathlib import Path
 import tempfile
 import time
 import zlib
+import product_weight as W
 import market_prices as M
 import store_links
 
@@ -37,6 +38,9 @@ def decode(data):
         raise ValueError('invalid audit schema')
     if len(doc['rows'])>MAX_ROWS: raise ValueError('audit row limit')
     for row in doc['rows']:
+        status=row.get('weight_status')
+        if status is not None and (not isinstance(status,dict) or type(status.get('found')) is not bool or status.get('kind') not in ('pkg','net','unknown') or any(not isinstance(status.get(k),str) or len(status[k])>512 for k in ('source','missing_reason'))):
+            raise ValueError('invalid audit weight status')
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>n for k,n in LIMITS.items()):
             raise ValueError('invalid audit row')
         if any(not number(row.get(k)) for k in ('ts','last_ts','seq','rules_version')):
@@ -128,6 +132,7 @@ class Ledger:
                  'category':d.get('cat','unknown'),'price':d.get('price'),'was':d.get('original'),
                  'was_kind':d.get('original_kind') or 'n/a','trust':d.get('trust','unknown'),
                  'title':d.get('title',''),'decision':decision,'reason':reason,'rules_version':self.rules}
+            row['weight_status']=W.status(d)
             for k,n in LIMITS.items():row[k]=str(row.get(k,''))[:n]
             for k in ('price','was','seen_ts','published_ts'):
                 if not number(row.get(k)):row[k]=None
@@ -147,7 +152,7 @@ class Ledger:
                     if row['decision']=='evaluating':row=dict(row,decision='interrupted',reason='assessment did not finish')
                     k=(row['listing'],int(row['ts']//86400))
                     prev=last.get(k)
-                    fields=('key','category','price','was','decision','reason','rules_version','store','store_basis')
+                    fields=('key','category','price','was','decision','reason','rules_version','store','store_basis','weight_status')
                     if prev and row['decision'] not in ('published','sending','delivery_unknown') and all(prev.get(f)==row.get(f) for f in fields):
                         prev['last_ts']=max(prev['last_ts'],row['last_ts']);prev['seen_ts']=row['seen_ts']
                     else:out.append(row);last[k]=row

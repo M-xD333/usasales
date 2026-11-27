@@ -34,22 +34,22 @@ class WeightParsing(unittest.TestCase):
         self.assertIsNone(W.from_markup('<table><th>Shipping Weight</th><td>5 pounds</td></table>',URL))
 
     def test_weight_with_unit_in_label(self):
-        self.assertEqual(W.from_markup('<dl><dt>Weight (kg)</dt><dd>1.2</dd></dl>',URL),1.2)
+        self.assertEqual(W.from_markup('<dl><dt>Net Weight (kg)</dt><dd>1.2</dd></dl>',URL),1.2)
 
     def test_conflicting_variants_or_recommendations_are_not_used(self):
         a={**schema(),'weight':'1 kg'};b={**schema(),'weight':'2 kg'}
         self.assertIsNone(W.from_markup(markup([a,b]),URL))
-        b['url']=URL+'/other';self.assertEqual(W.from_markup(markup([a,b]),URL),1)
+        b['url']=URL+'/other';self.assertIsNone(W.from_markup(markup([a,b]),URL))
         self.assertIsNone(W.from_markup(markup([a,b]),URL+'/unknown'))
 
     def test_additional_product_property(self):
-        self.assertAlmostEqual(W.from_product({'additionalProperty':[{'name':'Weight','value':'700 g'}]}),.7)
+        self.assertAlmostEqual(W.from_product({'additionalProperty':[{'name':'Net Weight','value':'700 g'}]}),.7)
         self.assertIsNone(W.from_product({'additionalProperty':[{'name':'Shipping Weight','value':'2 kg'}]}))
 
 
 class WeightDelivery(unittest.TestCase):
     def test_message_and_short_fallback_show_kg(self):
-        d=approved();d['weight_kg']=.85
+        d=approved();W.apply(d,W.from_product_fields({'weight':'850 g'},d['url'],NOW))
         info=bot.assess(d,{'n':0,'median':None},cfg(),NOW)[1]
         self.assertIn('⚖️ Вес: 0.85 кг',bot.build_message(d,info))
         with patch.dict('os.environ',{'CHANNEL_LINK':'x'*5000}):
@@ -62,9 +62,9 @@ class WeightDelivery(unittest.TestCase):
         self.assertIn('Вес: не указан',bot.build_message(d,info))
 
     def test_process_enriches_weight_and_photo_together(self):
-        d=approved();send=Mock();details=Mock(return_value={'weight_kg':1.25,'image_url':'https://images.example.com/product.jpg'})
-        bot.process([d],state(),{},NOW,cfg(),send,details_resolver=details)
-        details.assert_called_once_with(d['url'])
+        d=approved();send=Mock();details=Mock();details.get.return_value={**W.from_product_fields({'weight':'1.25 kg'},d['url'],NOW),'image_url':'https://images.example.com/product.jpg'}
+        bot.process([d],state(),{},NOW,cfg(),send,weight_reader=details)
+        self.assertTrue(details.get.called)
         self.assertIn('Вес: 1.25 кг',send.call_args.args[0])
         self.assertEqual(send.call_args.kwargs['photo_url'],'https://images.example.com/product.jpg')
 
