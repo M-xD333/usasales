@@ -5,7 +5,7 @@ on:
       audit:
         description: Read-only audit to run after tests
         type: choice
-        options: [none, weight, feeds]
+        options: [none, weight, feeds, upc]
         default: none
 permissions:
   contents: read
@@ -41,4 +41,13 @@ jobs:
         with:
           name: feed-probe-${{ github.run_id }}
           path: /tmp/feed-probe.json
+          retention-days: 7
+      - name: Read-only UPC free probe
+        if: inputs.audit == 'upc'
+        run: python tools/upc_free_probe.py
+      - uses: actions/upload-artifact@v4
+        if: inputs.audit == 'upc' && always()
+        with:
+          name: upc-free-probe-${{ github.run_id }}
+          path: /tmp/upc-free-probe.json
           retention-days: 7
