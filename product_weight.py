@@ -248,7 +248,7 @@ def status(deal):
             return {'found':True,'source':(deal.get('weight_'+kind+'_provenance') or {}).get('source','unknown'),
                     'kind':kind,'missing_reason':''}
     if deal.get('weight_sum_kg'):
-        return {'found':True,'source':'components','kind':'net','missing_reason':'component_sum_not_measured_package'}
+        return {'found':False,'source':'components','kind':'unknown','missing_reason':'component_sum_not_measured_package'}
     return {'found':False,'source':'','kind':'unknown','missing_reason':deal.get('weight_missing_reason','not_looked_up')}
 
 

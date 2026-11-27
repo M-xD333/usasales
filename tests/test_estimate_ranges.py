@@ -43,3 +43,14 @@ def test_range_payload_validate_restart_and_measured_priority(tmp_path):
     W.apply(d,fields('2 kg'));assert W.display_deal(d)=='2 кг (с упаковкой)'
     bad=dict(d,weight_estimate_range_kg=[12,6],weight_estimate_basis={'version':'estimate_v1','kind':'category','samples':0})
     with pytest.raises(ValueError):W.validate(bad)
+
+
+def test_derived_sum_is_not_measured_net_or_package():
+    from tools.weight_coverage import coverage
+    d={'cat':'combo','weight_components':[fields('1 kg'),fields('2 kg')]}
+    assert W.display_deal(d)=='≈ сумма: 3 кг (комплектующие)'
+    s=W.status(d);assert s['found'] is False and s['kind']=='unknown'
+    row={'id':'x','listing':'x','price':50,'store':'example','category':'combo','weight_status':s}
+    report=coverage({'rows':[row]});assert all(g['derived_sum']==1 and 'net' not in g and 'pkg' not in g for g in report['groups'])
+    row['weight_status']=dict(s,found=True,kind='net') # Correct metrics for the earlier optional audit shape, without rewriting it.
+    assert coverage({'rows':[row]})['groups'][0]['derived_sum']==1
