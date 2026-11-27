@@ -58,3 +58,6 @@ Shipping Weight теперь разрешён и приоритетен; пре�
 | Git | Два писателя и повреждённый необязательный кеш не трогают posted | test_workflow_git.RunnerSyncTests.test_weight_knowledge_concurrent_merge_and_corrupt_optional_snapshot |
 
 API и редактирование отправленных постов — дизайн, без запросов/изменений Telegram. Обычные business-пороги, posted, delivery и publication_history floors не меняются. PARSER_VERSION=5, RULES_VERSION=7.
+
+
+Уточнение владельца 2026-11-27, шаг 1: обычные карточки читаются фоном с hard deadline 6 с (прежде 2 с), отправка не ждёт. Никаких альтернатив для Best Buy 403/CamelCamelCamel. Runtime печатает commit/PARSER_VERSION и сохраняет копию строки в optional audit; merge выбирает свежую. `weight_runner_probe` — до 25 обычных URL, один GET/URL, отдельный read-only runner/artifact. PR никогда не содержит data/. O5 одобрен ON; Best Buy API и Keepa вне объёма. Последующие изменения — тесты, отдельный squash PR и проверка публичного поста; три сбойных прохода или сломанный формат требуют revert кода без reset фактов доставки.

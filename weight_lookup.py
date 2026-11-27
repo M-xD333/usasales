@@ -8,7 +8,7 @@ import product_weight as W
 import product_images
 import store_links
 
-BUDGET=2.0
+BUDGET=6.0
 MAX_LOOKUPS=30
 
 
