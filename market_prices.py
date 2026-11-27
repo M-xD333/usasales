@@ -174,17 +174,20 @@ def quote(deal, observed_at):
             "mpn": normalize(meta.get("mpn")), "brand": normalize(meta.get("brand"))}
 
 
+def aggregator_store_url(deal):
+    """Known primary merchant only; never attribute roundup secondary links."""
+    if deal.get('price_origin')!='feed':return None
+    allowed={'newegg.com','bestbuy.com'}
+    primary=canonical_url(deal.get('url'))
+    if shop(primary) in allowed:return primary
+    declared={'newegg':'newegg.com','neweggcom':'newegg.com','bestbuy':'bestbuy.com','bestbuycom':'bestbuy.com'}.get(normalize(deal.get('store')))
+    if declared not in allowed:return None
+    return next((u for raw in deal.get('store_candidates',[]) if (u:=canonical_url(raw)) and shop(u)==declared),None)
+
+
 def newegg_aggregator_url(deal):
-    """A roundup's secondary merchant links do not establish its offer's store."""
-    if deal.get('price_origin') != 'feed':
-        return None
-    primary = canonical_url(deal.get('url'))
-    if shop(primary) == 'newegg.com':
-        return primary
-    if normalize(deal.get('store')) not in ('newegg', 'neweggcom'):
-        return None
-    return next((u for raw in deal.get('store_candidates', [])
-                 if (u := canonical_url(raw)) and shop(u) == 'newegg.com'), None)
+    url=aggregator_store_url(deal)
+    return url if shop(url)=='newegg.com' else None
 
 
 def aggregator_conditions(deal):
@@ -192,7 +195,7 @@ def aggregator_conditions(deal):
     strict = purchase_conditions(deal)
     if strict['eligible'] or deal.get('trust') not in ('curated', 'community'):
         return strict
-    if not newegg_aggregator_url(deal) or deal.get('price_kind') not in ('coupon', 'code'):
+    if not aggregator_store_url(deal) or deal.get('price_kind') not in ('coupon', 'code'):
         return strict
     parts = deal.get('price_components') or {}
     price = deal.get('price')
@@ -215,7 +218,7 @@ def aggregator_candidate(deal, url):
     shipping = 0 if 'free_shipping' in deal.get('flags', []) else meta.get('shipping')
     if shipping is not None and (not number(shipping) or shipping < 0):
         return None
-    return dict(key=identity(deal), keys=sorted(identity_keys(deal)), shop='newegg.com',
+    return dict(key=identity(deal), keys=sorted(identity_keys(deal)), shop=shop(url),
                 url=url, price=conditions['price'], shipping=shipping,
                 gtins=[g for x in meta.get('gtins', []) if (g := valid_gtin(x))],
                 mpn=normalize(meta.get('mpn')), brand=normalize(meta.get('brand')))
@@ -392,7 +395,7 @@ class MarketPrices:
     def compare(self, deal, min_pct, min_sav):
         if deal.get("cat") == "combo":
             return None, "для сравнения комплекта нужен подтверждённый полный состав, не цена одной детали"
-        aggregator_url = newegg_aggregator_url(deal)
+        aggregator_url = aggregator_store_url(deal)
         key = identity(deal)
         if not key and self.discoverer:
             # A feed may omit the manufacturer's part number; only the store may supply it.
@@ -430,7 +433,7 @@ class MarketPrices:
         if len(by_shop) < 2:
             detail = "; поиск: " + "; ".join(search["notes"]) if search else "; поиск ожидает лимита запросов" if self.discoverer else ""
             return None, f"подтверждено других независимых магазинов: {len(by_shop)}/2" + detail
-        aggregator_url = newegg_aggregator_url(deal)
+        aggregator_url = aggregator_store_url(deal)
         pinned = dict(deal, url=aggregator_url, store_candidates=[]) if aggregator_url else deal
         current = self.verify_offer(pinned)
         unverified = False

@@ -693,3 +693,6 @@ Smoke не публикует и не сохраняет состояние, н�
 
 
 Шаг 3: optional weight_edits.json.gz <=400КБ/2000 записей, TTL24ч; отдельный validate/load/merge/artifact, без изменения publication_history/posted/delivery. Копируется message_id из реального receipt, сохраняется точный send payload/hash. Одна попытка редактирования только строки веса, preflight публичного превью запрещает перезапись ручной цены/ссылок. text→editMessageText, photo→editMessageCaption. Неопределённый ответ не повторяется. config/late_weight_edit.json=canary (одна попытка); штатный ON запрещён, пока public_preview_verified=false. OFF: LATE_WEIGHT_EDITS=off. После наблюдаемой реальной правки разрешён переход ON; до этого proof4 pending. Регрессии: test_weight_edits.
+
+
+Шаг 4: Best Buy от curated/community агрегатора может публиковаться с явной пометкой непроверенной цены при недоступной карточке. Только основной URL/явный store+товарный кандидат, не вторичная ссылка roundup. Реальные community votes/пороги и явное противоречие магазина сохраняют силу; unvetted Best Buy не получает fast path. Best Buy403 не обходится, никакого API. RULES_VERSION=8. Замер до изменения: в сохранённых pending и audit0 доказуемо атрибутированных Best Buy; непрозрачные ссылки не считаются Best Buy наугад. Регрессии test_bestbuy_aggregator.

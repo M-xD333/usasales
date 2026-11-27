@@ -50,7 +50,7 @@ RULES = {
 DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
-RULES_VERSION = 7
+RULES_VERSION = 8
 PARSER_VERSION = 6
 
 
@@ -515,7 +515,8 @@ def build_message(d, info):
     if d['cat'] == 'combo':
         lines.append('📦 Цена за весь комплект; состав и наличие уточняйте по ссылке')
     if info.get('aggregator_unverified'):
-        lines.append('ℹ️ Цена из агрегатора, не проверена на странице Newegg')
+        store_label='Best Buy' if market_prices.shop(d.get('url'))=='bestbuy.com' else 'Newegg'
+        lines.append('ℹ️ Цена из агрегатора, не проверена на странице '+store_label)
         if d.get('price_kind') in ('coupon', 'code'):
             lines.append('ℹ️ Купон/промокод взят из агрегатора; проверьте его применение')
     weight = product_weight.display_deal(d)
@@ -791,7 +792,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             add_sample(samples, d, now)
         per_src[sid]['оценено'] += 1
         verified = None
-        aggregator_url = market_prices.newegg_aggregator_url(d)
+        aggregator_url = market_prices.aggregator_store_url(d)
         if aggregator_url and d['trust'] not in ('curated', 'community') and not info['final']:
             ok = False  # Unvetted feeds always require two independent competing stores.
         needs_confirmation = info['priority_verification'] or d.get('price_kind') in ('coupon', 'code')
@@ -814,7 +815,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
                 info['verified_offer'] = checked
             elif market.raw_verified.get(aggregator_url) is not None:
                 ok = False
-                info['reason'] = 'карточка Newegg не подтверждает цену или условия'
+                info['reason'] = 'карточка '+('Best Buy' if market_prices.shop(aggregator_url)=='bestbuy.com' else 'Newegg')+' не подтверждает цену или условия'
             elif d['trust'] in ('curated', 'community') and market_prices.aggregator_conditions(d)['eligible']:
                 ok, info = assess(d, stats_h, cfg, now, aggregator_price=True)
                 info['aggregator_unverified'] = True
