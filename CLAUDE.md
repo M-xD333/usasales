@@ -122,7 +122,7 @@ usasales/
 | `store_links.py` | `merchant_url`, `unwrap`, `extract_links`, `follow`, `resolve_store_url` | Получить разрешённую прямую ссылку конкретного товара |
 | `merchant_http.py` | `get` | Максимум три HTTPS-перехода только между разрешёнными merchant-доменами |
 | `product_images.py` | `from_feed`, `extract_image`, `image_url`, `from_product_details`, `from_product_page` | Фото из ленты/JSON-LD/OG; детали карточки одним запросом |
-| `product_weight.py` | `kilograms`, `from_product`, `from_markup`, `display` | Только явно заданный вес товара, конвертация единиц |
+| `product_weight.py` | `kilograms`, `from_product`, `from_markup`, `display` | O4: раздельный package/net с происхождением и конвертацией единиц |
 | `offer_queue.py` | `merge_latest`, `revision`, `price_event`, `history_eligible`, `pkey` | Убрать устаревший pending, отслеживать изменения, защищать baseline |
 | `publication_history.py` | `aliases`, `seen`, `remember`, `merge` | Узнать уже отправленный товар и разрешить только новое снижение цены |
 | `checkpoints.py` | `Store.load`, `Store.save`, `validate_*`, `atomic_json` | Атомарное состояние, валидация, legacy migration, backup recovery |
@@ -240,10 +240,10 @@ GitHub schedule / manual dispatch
 - Цена: `price`, `original`, `original_kind`, `price_kind`, `code`, `issue`, `price_origin`, `price_components`.
 - Ссылки: `url`, `discuss`, `store_candidates`, `store`.
 - Время: `published_ts`, `fetched_ts`, `undated`.
-- Данные товара: `product_meta`, `image_url`, `weight_kg`.
+- Данные товара: `product_meta`, `image_url`, `weight_pkg_kg`, `weight_net_kg`, provenance; legacy `weight_kg` — только net-экспорт.
 - Во время обработки: `_queue`, `_rebound_at`.
 
-`product_meta`: `brand`, `mpn`, `gtins`, `currency`, `market`, `condition`, `in_stock`, `shipping`, `seller`, `weight_kg`, при необходимости `coupon`.
+`product_meta`: `brand`, `mpn`, `gtins`, `currency`, `market`, `condition`, `in_stock`, `shipping`, `seller`, `weight_pkg_kg`, `weight_net_kg` с provenance (legacy `weight_kg` только net), при необходимости `coupon`.
 
 Поля имеют разные смыслы:
 
@@ -453,13 +453,19 @@ GitHub schedule / manual dispatch
 - Для Corsair CDN `f_auto` преобразуется в JPEG rendition.
 - `from_product_details()` читает фото и вес одной карточки одним запросом.
 
-Вес:
+Вес (политика владельца O4, 2026-11-27):
 
-- Источники: `Product.weight`, `additionalProperty`, явные Item/Product/Net Weight в таблице/dl карточки.
-- Поддерживаются kg/g/lb/oz, слова и стандартные unit codes.
-- Shipping Weight, упаковка, неоднозначные диапазоны и числа без единицы не используются.
-- Пример: `⚖️ Вес: 0.85 кг`; при отсутствии данных — `⚖️ Вес: не указан`.
-- Неизвестный вес/отсутствующее фото не должны блокировать подходящее предложение.
+- Основной вес для расчёта доставки — **package/shipping**: Shipping Weight, Package Weight, Weight (with packaging), масса после `;` в Amazon Package Dimensions.
+- Item/Product/Net Weight и schema Product.weight — отдельно net; поле без явного вида («Weight») и неоднозначные варианты не угадываются.
+- `weight_pkg_kg`/`weight_net_kg` имеют отдельные `weight_pkg_provenance`/`weight_net_provenance`: source, field, ts. kg/g/lb/oz обязательны и переводятся в кг.
+- Приоритет подписи: `⚖️ Вес: 1 кг (с упаковкой)` → `⚖️ Вес: 0.5 кг (без упаковки)` → `⚖️ Вес: не указан`. Отсутствие веса не ограничивает публикацию.
+- У комплектов сумма только полного набора компонентов одного вида веса: `≈ … кг (сумма комплектующих)`; это не измеренный вес посылки. Неполный набор — неизвестно.
+- O5: `WEIGHT_ESTIMATES=0` по умолчанию; при явном включении ограниченные оценки категорий подписываются `≈ … кг (оценка)`, не являются package/net и не увеличивают измеренное покрытие.
+- В отправляющем потоке нет ожидания веса: `weight_lookup.Lookup` заранее читает карточки в максимум двух дочерних процессах, до 30 запросов за проход, жёсткий deadline 2 с/запрос. Готовый результат/кеш читается без ожидания, иначе неизвестно.
+- `weight_knowledge.json.gz` — отдельный необязательный кеш до 500 000 байт; ASIN/MPN/UPC/нормализованная модель + строгий guard ёмкости/цвета/комплекта/состояния; 180 дней. Его сбой не меняет publication_history и не блокирует отправку.
+- Поля очереди валидируются в checkpoints, переносятся при совместимой идентичности и проверены restart/merge тестами. Legacy scalar без происхождения не превращается в package.
+- Журнал содержит optional `weight_status`; старые строки без него — unmeasured. `tools/weight_coverage.py` показывает покрытие по магазину/категории и учитывает обрезку журнала.
+- [Измерение, ограничения, API и позднее редактирование — только дизайн](docs/package-weight-2026-11-27.md).
 
 ## 13. Атомарное сохранение и Git
 
@@ -592,7 +598,7 @@ Smoke не публикует и не сохраняет состояние, н�
 | `test_market_search.py` | Точный discovery, бюджеты, реальные ссылки вместо snippet prices |
 | `test_store_links.py` | Allowlist, раскрытие, редиректы, отказ от неподходящих URL |
 | `test_product_images.py` | Извлечение фото, sendPhoto, fallback, captions, retries |
-| `test_product_weight.py` | Единицы, JSON-LD/таблицы, исключение shipping weight, подпись |
+| `test_product_weight.py` | Единицы, JSON-LD/таблицы, package/net, обязательные единицы, происхождение, подпись |
 | `test_music_search.py` | Музыкальные поисковые запросы и категории |
 | `test_publication_history.py` | Дни 1/2/7/30, новые цены, aliases, restart и Git merge |
 | `test_regressions.py` | Аудит очереди/кэша/checkpoint, extreme/coupon, fairness и deadline |

@@ -20,6 +20,8 @@ import sources as S
 import store_links
 import product_images
 import product_weight
+import weight_knowledge
+import weight_lookup
 import market_prices
 import market_search
 import checkpoints
@@ -47,7 +49,7 @@ DEFAULT_RULE = (30, 20)
 INFLATE_FACTOR = 3.0    # заявленная «старая» цена > 3× медианы наших наблюдений = подозрительна
 MAX_SANE_DISCOUNT = 85  # скидка больше — скорее ошибка разбора
 RULES_VERSION = 7
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 
 
 def env_int(name, default):
@@ -363,6 +365,7 @@ def make_deal(entry, source, now):
         "store": store,
         "url": entry["url"], "discuss": entry["discuss_url"], "published_ts": ts, "undated": undated,
         "store_candidates": entry.get("store_candidates", []),
+        **{k:v for k,v in (entry.get("product_meta") or {}).items() if k in product_weight.WEIGHT_FIELDS},
         "product_meta": entry.get("product_meta", {}) if source.type == "store" else {},
         "price_origin": "store" if source.type == "store" else "feed",
         "price_components": pi.get("price_components", {}),
@@ -513,7 +516,7 @@ def build_message(d, info):
         lines.append('ℹ️ Цена из агрегатора, не проверена на странице Newegg')
         if d.get('price_kind') in ('coupon', 'code'):
             lines.append('ℹ️ Купон/промокод взят из агрегатора; проверьте его применение')
-    weight = product_weight.display(d.get('weight_kg') or (d.get('product_meta') or {}).get('weight_kg'))
+    weight = product_weight.display_deal(d)
     lines.append('⚖️ Вес: ' + weight)
     direct = store_links.merchant_url(d.get("url"))
     if direct:
@@ -569,12 +572,18 @@ def photo_caption(text, store_url=None):
     plain = html.unescape(re.sub(r"<[^>]*>", "", text))
     if len(plain.encode("utf-16-le")) <= 1024 * 2:
         return {"caption": text, "parse_mode": "HTML"}
+    weight_line = next((line for line in plain.splitlines() if line.startswith('⚖️ Вес:')), '')
     if store_url:
         # Keep a clickable purchase link even when the full message exceeds a caption.
         lead = plain.encode('utf-16-le')[:1100].decode('utf-16-le', errors='ignore')
+        if weight_line:
+            lead='\n'.join(line for line in lead.splitlines() if not line.startswith('⚖️ Вес:'))+'\n'+weight_line
         return {'caption': html.escape(lead) + '…\n🛒 <a href="' + html.escape(store_url, quote=True) + '">Открыть товар в магазине</a>', 'parse_mode': 'HTML'}
     # Rare long captions: preserve essential leading information without cutting HTML tags.
-    caption = plain.encode("utf-16-le")[:1023 * 2].decode("utf-16-le", errors="ignore") + "…"
+    tail=('\n'+weight_line) if weight_line else ''
+    body=plain.replace(weight_line,'') if weight_line else plain
+    reserve=len(tail.encode('utf-16-le'))
+    caption = body.encode("utf-16-le")[:1023 * 2-reserve].decode("utf-16-le", errors="ignore") + "…"+tail
     return {"caption": caption}
 
 
@@ -689,11 +698,14 @@ def prune_history(hist, now, days):
 
 # ============================== основной цикл ==============================
 def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save_hist=None, log=print,
-            image_resolver=None, market=None, details_resolver=None, audit=None):
+            image_resolver=None, market=None, details_resolver=None, audit=None, weight_reader=None):
     """Durable outbox: save the whole work queue before the first external delivery."""
     if dry:
         state, hist, deals = copy.deepcopy(state), copy.deepcopy(hist), copy.deepcopy(deals)
     emit = (lambda *args: None) if dry or audit is None else audit
+    own_weight_reader = bool(details_resolver and not weight_reader and not dry)
+    if own_weight_reader:
+        weight_reader = weight_lookup.Lookup(resolver=details_resolver)
     stats, per_src, waiting, fatal = Counter(), defaultdict(Counter), [], False
     save_state = (lambda s: None) if dry else (save_state or (lambda s: None))
     save_hist = (lambda h: None) if dry else (save_hist or (lambda h: None))
@@ -706,6 +718,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
     pending = {offer_queue.pkey(d): d for d in deals}
     state['pending'] = pending
     for d in deals:
+        if weight_reader and not dry: weight_reader.request(d)
         q = d.setdefault('_queue', {'status': 'queued', 'attempts': 0, 'retry_at': 0})
         rev = offer_queue.revision(d, cfg, RULES_VERSION, PARSER_VERSION)
         if q.get('revision') != rev:
@@ -735,6 +748,9 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
     for d in deals:
         sid, key = d['source_id'], offer_queue.pkey(d)
         q = d['_queue']
+        if weight_reader and not dry:
+            product_weight.apply(d, weight_reader.get(d))
+        product_weight.prepare(d)
         if q.get('retry_at', 0) > now:
             emit(d, q.get('status', 'queued'), q.get('reason', 'retry scheduled'))
             continue
@@ -876,12 +892,13 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
             emit(d, 'duplicate', 'confirmed publication floor after link resolution')
             log(f"[DEDUP] {d['name'][:80]}: цена {fmt_price(d['price'])} уже публиковалась или выше прежней; повтор пропущен")
             continue
-        if not dry and details_resolver and (not d.get('weight_kg') or not d.get('image_url')):
-            details = details_resolver(direct) or {}
-            if not d.get('weight_kg'):
-                d['weight_kg'] = product_weight.kilograms(details.get('weight_kg'), 'kg')
+        if not dry and weight_reader:
+            weight_reader.request(dict(d, url=direct))
+            details = weight_reader.get(dict(d, url=direct))
+            product_weight.apply(d, details)
             if not d.get('image_url'):
                 d['image_url'] = product_images.image_url(details.get('image_url'))
+        product_weight.prepare(d)
         if not dry and image_resolver and not product_images.image_url(d.get('image_url')):
             d['image_url'] = image_resolver(direct)
         msg = build_message(d, info)
@@ -934,6 +951,7 @@ def process(deals, state, hist, now, cfg, send, dry=False, save_state=None, save
         log(f'[QUEUE] Вытеснено {removed} кандидатов; сохранено {len(pending)}, факты доставки сохранены')
     save_state(state)
     save_hist(hist)
+    if own_weight_reader: weight_reader.close()
     return stats, per_src, waiting, fatal
 
 
@@ -1015,6 +1033,10 @@ def main(argv=None):
         print("[ERROR] все источники недоступны")
         return 1
 
+    knowledge = None if dry else weight_knowledge.Knowledge(DATA / weight_knowledge.FILE, now)
+    weights = None if dry else weight_lookup.Lookup(knowledge)
+    for d in deals:
+        if knowledge: knowledge.remember(d)
     ledger = None if dry else offer_audit.Ledger(DATA / offer_audit.FILE, now, RULES_VERSION)
     audit = (lambda *args: None) if ledger is None else (lambda d, decision, reason='': ledger.record(d, decision, redact(reason)))
     for d in deals:
@@ -1044,8 +1066,9 @@ def main(argv=None):
                                       discoverer=market_search.discover)
     try:
         stats, per_src, waiting, fatal = process(deals, state, hist, now, cfg, tg_send, dry, ss, sh,
-                                               market=market, details_resolver=product_images.from_product_details, audit=audit)
+                                               market=market, weight_reader=weights, audit=audit)
     finally:
+        if weights: weights.close()
         if ledger: ledger.flush(final=True)
         ss(state)
         sh(hist)

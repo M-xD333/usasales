@@ -11,6 +11,7 @@ import time
 import checkpoints
 import state_merge
 import offer_audit
+import weight_knowledge
 
 # Accept the existing ~28 MB legacy generation during migration; reject unbounded inputs.
 RECOVERY_MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -44,6 +45,13 @@ class RunnerGit:
         for path in sorted(data.rglob("*")) if data.exists() else []:
             if not path.is_file() or path.is_symlink() or path.suffix == ".tmp":
                 continue
+            if path.name == weight_knowledge.FILE:
+                try:
+                    if path.stat().st_size > weight_knowledge.MAX_BYTES: raise ValueError('weight knowledge size')
+                    weight_knowledge.decode(path.read_bytes())
+                except (OSError,ValueError,EOFError):
+                    print('[WEIGHT] invalid optional knowledge skipped; checkpoint continues.')
+                    continue
             if path.name == offer_audit.FILE:
                 try:
                     if path.stat().st_size > offer_audit.MAX_BYTES: raise ValueError('audit size')
@@ -82,6 +90,15 @@ class RunnerGit:
         return files
 
     def merge_remote_state(self, files, parent):
+        name='data/'+weight_knowledge.FILE
+        size=self.git('cat-file','-s',parent+':'+name,check=False)
+        if size.returncode==0 and int(size.stdout.strip())<=weight_knowledge.MAX_BYTES:
+            remote=self.git('show',parent+':'+name,check=False,binary=True)
+            if remote.returncode==0:
+                try:
+                    weight_knowledge.decode(remote.stdout);files=dict(files)
+                    files[name]=weight_knowledge.merge_bytes(remote.stdout,files[name]) if name in files else remote.stdout
+                except (OSError,ValueError,EOFError):print('[WEIGHT] invalid optional remote knowledge ignored.')
         audit_name = 'data/' + offer_audit.FILE
         size = self.git('cat-file', '-s', parent + ':' + audit_name, check=False)
         if size.returncode == 0 and int(size.stdout.strip()) <= offer_audit.MAX_BYTES:
@@ -270,6 +287,15 @@ class RunnerGit:
                     recovered[audit_name] = offer_audit.merge_bytes(local[audit_name], value) if audit_name in local else value
                 except (OSError,ValueError,EOFError):
                     print('[AUDIT] optional recovery ledger unavailable; checkpoint recovery continues.')
+            name='data/'+weight_knowledge.FILE
+            path=Path(tmp)/weight_knowledge.FILE
+            if not path.exists():path=Path(tmp)/'data'/weight_knowledge.FILE
+            if path.exists():
+                try:
+                    if path.is_symlink() or path.stat().st_size>weight_knowledge.MAX_BYTES:raise ValueError('weight knowledge size')
+                    value=path.read_bytes();weight_knowledge.decode(value)
+                    recovered[name]=weight_knowledge.merge_bytes(local[name],value) if name in local else value
+                except (OSError,ValueError,EOFError):print('[WEIGHT] optional artifact knowledge ignored.')
             self.restore(recovered)
         print("Recovered newer state from " + latest["name"] + ".")
 

@@ -129,7 +129,8 @@ def from_product_details(url, session=requests):
             markup = b"".join(chunks).decode(r.encoding or "utf-8", errors="replace")
             final_url = r.url if isinstance(r.url, str) else url
             return {'image_url': extract_image(markup, final_url, product_page=True),
-                    'weight_kg': product_weight.from_markup(markup, final_url)}
+                    'weight_kg': product_weight.from_markup(markup, final_url),
+                    **product_weight.extract(markup, final_url)}
         finally:
             r.close()
     except (requests.RequestException, ValueError):

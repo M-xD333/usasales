@@ -1,3 +1,4 @@
+import copy
 """Queue identity, revisions and price events. No I/O or publication policy."""
 import hashlib
 import json
@@ -16,6 +17,8 @@ def pkey(deal):
 
 
 def merge_latest(deals, pending):
+    import product_weight as W
+    import weight_knowledge as K
     latest = {}
     urls = {}
     ids = {}
@@ -29,6 +32,9 @@ def merge_latest(deals, pending):
             urls[url] = key
         old = latest.get(key)
         if old is None or d.get('fetched_ts', 0) > old.get('fetched_ts', 0):
+            if old and set(K.identity(old)) & set(K.identity(d)):
+                for field in W.WEIGHT_FIELDS:
+                    if field not in d and field in old: d[field]=copy.deepcopy(old[field])
             if old and d['price'] == old['price']:
                 d.setdefault('_queue', old.get('_queue', {}).copy())
             latest[key] = d

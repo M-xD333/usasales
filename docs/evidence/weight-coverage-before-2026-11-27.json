@@ -1,0 +1,411 @@
+{
+  "rows": 8679,
+  "offers": 3913,
+  "started_at": 1795673758.005573,
+  "truncated_before": 1795734267.832079,
+  "dropped_capacity": 261416,
+  "groups": [
+    {
+      "dimension": "category",
+      "key": "case",
+      "seen": 8,
+      "unmeasured": 8
+    },
+    {
+      "dimension": "category",
+      "key": "controller",
+      "seen": 19,
+      "unmeasured": 19
+    },
+    {
+      "dimension": "category",
+      "key": "cooler",
+      "seen": 27,
+      "unmeasured": 27
+    },
+    {
+      "dimension": "category",
+      "key": "cpu",
+      "seen": 38,
+      "unmeasured": 38
+    },
+    {
+      "dimension": "category",
+      "key": "dock",
+      "seen": 30,
+      "unmeasured": 30
+    },
+    {
+      "dimension": "category",
+      "key": "ext_storage",
+      "seen": 25,
+      "unmeasured": 25
+    },
+    {
+      "dimension": "category",
+      "key": "gpu",
+      "seen": 46,
+      "unmeasured": 46
+    },
+    {
+      "dimension": "category",
+      "key": "hdd",
+      "seen": 5,
+      "unmeasured": 5
+    },
+    {
+      "dimension": "category",
+      "key": "headset",
+      "seen": 112,
+      "unmeasured": 112
+    },
+    {
+      "dimension": "category",
+      "key": "keyboard",
+      "seen": 75,
+      "unmeasured": 75
+    },
+    {
+      "dimension": "category",
+      "key": "laptop",
+      "seen": 307,
+      "unmeasured": 307
+    },
+    {
+      "dimension": "category",
+      "key": "microphone",
+      "seen": 37,
+      "unmeasured": 37
+    },
+    {
+      "dimension": "category",
+      "key": "minipc",
+      "seen": 26,
+      "unmeasured": 26
+    },
+    {
+      "dimension": "category",
+      "key": "mobo",
+      "seen": 23,
+      "unmeasured": 23
+    },
+    {
+      "dimension": "category",
+      "key": "monitor",
+      "seen": 99,
+      "unmeasured": 99
+    },
+    {
+      "dimension": "category",
+      "key": "mouse",
+      "seen": 66,
+      "unmeasured": 66
+    },
+    {
+      "dimension": "category",
+      "key": "music_gear",
+      "seen": 10,
+      "unmeasured": 10
+    },
+    {
+      "dimension": "category",
+      "key": "nas",
+      "seen": 3,
+      "unmeasured": 3
+    },
+    {
+      "dimension": "category",
+      "key": "networking",
+      "seen": 82,
+      "unmeasured": 82
+    },
+    {
+      "dimension": "category",
+      "key": "other",
+      "seen": 2279,
+      "unmeasured": 2279
+    },
+    {
+      "dimension": "category",
+      "key": "pixel",
+      "seen": 4,
+      "unmeasured": 4
+    },
+    {
+      "dimension": "category",
+      "key": "prebuilt",
+      "seen": 82,
+      "unmeasured": 82
+    },
+    {
+      "dimension": "category",
+      "key": "printer",
+      "seen": 30,
+      "unmeasured": 30
+    },
+    {
+      "dimension": "category",
+      "key": "psu",
+      "seen": 41,
+      "unmeasured": 41
+    },
+    {
+      "dimension": "category",
+      "key": "ram",
+      "seen": 33,
+      "unmeasured": 33
+    },
+    {
+      "dimension": "category",
+      "key": "review",
+      "seen": 370,
+      "unmeasured": 370
+    },
+    {
+      "dimension": "category",
+      "key": "ssd",
+      "seen": 26,
+      "unmeasured": 26
+    },
+    {
+      "dimension": "category",
+      "key": "webcam",
+      "seen": 10,
+      "unmeasured": 10
+    },
+    {
+      "dimension": "store",
+      "key": "Amazon",
+      "seen": 331,
+      "unmeasured": 331
+    },
+    {
+      "dimension": "store",
+      "key": "Asus",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Bass Pro Shop",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Best Buy",
+      "seen": 18,
+      "unmeasured": 18
+    },
+    {
+      "dimension": "store",
+      "key": "BestBuy",
+      "seen": 2,
+      "unmeasured": 2
+    },
+    {
+      "dimension": "store",
+      "key": "Costco",
+      "seen": 4,
+      "unmeasured": 4
+    },
+    {
+      "dimension": "store",
+      "key": "Drum Castle",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Green Man Gaming",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Kohl's",
+      "seen": 2,
+      "unmeasured": 2
+    },
+    {
+      "dimension": "store",
+      "key": "Loaded",
+      "seen": 9,
+      "unmeasured": 9
+    },
+    {
+      "dimension": "store",
+      "key": "Lowe's",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Macy's",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Miami Guitars",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Newegg",
+      "seen": 4,
+      "unmeasured": 4
+    },
+    {
+      "dimension": "store",
+      "key": "Nike Store",
+      "seen": 3,
+      "unmeasured": 3
+    },
+    {
+      "dimension": "store",
+      "key": "Nike.com",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Office Depot",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Staples",
+      "seen": 2,
+      "unmeasured": 2
+    },
+    {
+      "dimension": "store",
+      "key": "Steam",
+      "seen": 5,
+      "unmeasured": 5
+    },
+    {
+      "dimension": "store",
+      "key": "Target",
+      "seen": 3,
+      "unmeasured": 3
+    },
+    {
+      "dimension": "store",
+      "key": "USB-C or NFC",
+      "seen": 2,
+      "unmeasured": 2
+    },
+    {
+      "dimension": "store",
+      "key": "Ulta",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Various Stores",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "Walmart",
+      "seen": 30,
+      "unmeasured": 30
+    },
+    {
+      "dimension": "store",
+      "key": "Woot",
+      "seen": 12,
+      "unmeasured": 12
+    },
+    {
+      "dimension": "store",
+      "key": "amazon.com",
+      "seen": 622,
+      "unmeasured": 622
+    },
+    {
+      "dimension": "store",
+      "key": "asus.com",
+      "seen": 2,
+      "unmeasured": 2
+    },
+    {
+      "dimension": "store",
+      "key": "bhphotovideo.com",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "corsair.com",
+      "seen": 123,
+      "unmeasured": 123
+    },
+    {
+      "dimension": "store",
+      "key": "costco.com",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "crucial.com",
+      "seen": 4,
+      "unmeasured": 4
+    },
+    {
+      "dimension": "store",
+      "key": "eBay",
+      "seen": 6,
+      "unmeasured": 6
+    },
+    {
+      "dimension": "store",
+      "key": "ebay.com",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "hp.com",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "razer.com",
+      "seen": 1,
+      "unmeasured": 1
+    },
+    {
+      "dimension": "store",
+      "key": "samsung.com",
+      "seen": 15,
+      "unmeasured": 15
+    },
+    {
+      "dimension": "store",
+      "key": "unknown",
+      "seen": 2612,
+      "unmeasured": 2612
+    },
+    {
+      "dimension": "store",
+      "key": "walmart.com",
+      "seen": 75,
+      "unmeasured": 75
+    },
+    {
+      "dimension": "store",
+      "key": "woot.com",
+      "seen": 11,
+      "unmeasured": 11
+    }
+  ]
+}
