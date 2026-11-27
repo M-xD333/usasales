@@ -59,7 +59,7 @@ class WeightDelivery(unittest.TestCase):
 
     def test_missing_weight_is_explicit(self):
         d=approved();info=bot.assess(d,{'n':0,'median':None},cfg(),NOW)[1]
-        self.assertIn('Вес: не указан',bot.build_message(d,info))
+        self.assertIn('Вес: ≈ 0.05-0.3 кг (оценка по категории)',bot.build_message(d,info))
 
     def test_process_enriches_weight_and_photo_together(self):
         d=approved();send=Mock();details=Mock();details.get.return_value={**W.from_product_fields({'weight':'1.25 kg'},d['url'],NOW),'image_url':'https://images.example.com/product.jpg'}
@@ -70,7 +70,7 @@ class WeightDelivery(unittest.TestCase):
 
     def test_unknown_weight_does_not_block_publication(self):
         send=Mock();bot.process([approved()],state(),{},NOW,cfg(),send,details_resolver=lambda u:None)
-        send.assert_called_once();self.assertIn('Вес: не указан',send.call_args.args[0])
+        send.assert_called_once();self.assertIn('Вес: ≈ 0.05-0.3 кг (оценка по категории)',send.call_args.args[0])
 
     def test_same_page_fetch_returns_both_image_and_weight(self):
         session=Mock();response=session.get.return_value

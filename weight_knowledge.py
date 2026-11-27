@@ -49,6 +49,7 @@ def decode(data):
     for key,row in doc['rows'].items():
         if not re.fullmatch('[a-f0-9]{64}',key) or not isinstance(row,dict):raise ValueError('knowledge row')
         W.validate(row)
+        if 'category' in row and (not isinstance(row['category'],str) or len(row['category'])>32):raise ValueError('invalid knowledge category')
         if not W.kilograms(row.get('at'),'kg'):raise ValueError('knowledge timestamp')
         for kind in ('pkg','net'):
             prov=row.get('weight_'+kind+'_provenance',{})
@@ -80,6 +81,7 @@ def merge_bytes(a,b,now=None):
             pk='weight_'+kind+'_provenance';wk='weight_'+kind+'_kg'
             if value.get(wk) and value.get(pk,{}).get('ts',0)>=old.get(pk,{}).get('ts',0):
                 merged[wk]=value[wk];merged[pk]=value[pk]
+        if value.get('category'):merged['category']=value['category']
         merged['at']=max(old.get('at',0),value['at']);rows[key]=merged
     return compact({'version':1,'rows':rows},now)
 
@@ -108,7 +110,10 @@ class Knowledge:
         except ValueError:
             self.log('[WEIGHT] invalid evidence ignored');return
         for key in identity(deal):
-            row=dict(self.doc['rows'].get(key,{}));row.update(fields,at=self.now);self.doc['rows'][key]=row
+            row=dict(self.doc['rows'].get(key,{}));row.update(fields,at=self.now,category=str(deal.get('cat','unknown'))[:32]);self.doc['rows'][key]=row
+    def estimate(self,deal):
+        import weight_estimates
+        return weight_estimates.estimate(deal.get('cat'),self.doc['rows'].values())
     def save(self):
         if self.disabled:return
         temp=None
